@@ -1,0 +1,1163 @@
+class Avatar {
+    constructor(x, y, c){
+        this.x = x
+        this.y = y
+        this.color = c
+        
+        // stats
+        this.max_spd = 3
+        this.max_bombs = 1
+        this.bomb_len = 2
+        this.bomb_spd = 10
+        this.bomb_fuse = 3000
+        this.bomb_split = 4
+        this.bomb_power = false
+        this.bomb_kick = false
+        this.shield_time = 0
+        this.reverse_time = 0
+        this.poop_time = 0
+        this.invis_time = 0
+        
+        // internal fields
+        this.spd = 0
+        this.spd_sp = 0
+        this.dirs = []
+        this.blocked_up = false
+        this.blocked_down = false
+        this.blocked_left = false
+        this.blocked_right = false
+        this.last_dir = 0
+        this.slide_dir = -1
+        this.live_bombs = []
+    }
+
+    get direction(){
+        if(this.slide_dir >= 0){
+            return this.slide_dir
+        }else{
+            var dir = this.last_dir
+            if(this.dirs.length > 1){
+                var d1 = this.dirs[this.dirs.length - 2]
+                var d2 = this.dirs[this.dirs.length - 1]
+                if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 180) 
+                    || (this.blocked_down && d1 == 90) || (this.blocked_up && d1 == 270)){
+                    dir = d2
+                }else{
+                    dir = d1
+                }
+            }else if(this.dirs.length > 0){
+                dir = this.dirs[this.dirs.length - 1]
+            }
+            if(this.reverse_time > 0){
+                dir = (dir + 180) % 360
+            }
+
+            return dir
+        }
+    }
+
+    update(dt){
+        var d1 = this.direction
+        var dir = d1*Math.PI/180
+        var spd_err = this.spd_sp - this.spd;
+        var spd = this.spd + Math.sign(spd_err)*Math.min(Math.abs(spd_err), this.max_spd/3)
+        spd = Math.max(Math.min(spd, this.max_spd), 0)
+        spd = Math.min(spd, 9)
+        
+        if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 180) 
+            || (this.blocked_down && d1 == 90) || (this.blocked_up && d1 == 270)){
+            this.spd = 0
+        }else{
+            this.spd = spd
+            this.x += Math.cos(dir)*spd*dt/1000
+            this.y += Math.sin(dir)*spd*dt/1000;
+        }
+
+        for(var i = this.live_bombs.length - 1; i >= 0; i--){
+            if(this.live_bombs[i].state == 'dead'){
+                delete this.live_bombs[i]
+                this.live_bombs.splice(i, 1)
+            }
+        }
+
+        if(this.shield_time > 0){
+            this.shield_time -= dt
+        }
+
+        if(this.reverse_time > 0){
+            this.reverse_time -= dt
+        }
+
+        if(this.poop_time > 0){
+            this.poop_time -= dt
+        }
+
+        if(this.invis_time > 0){
+            this.invis_time -= dt
+        }
+    }
+}
+
+class Bomb {
+    constructor(x, y, spd, time, len, num, power){
+        this.x = x
+        this.y = y
+        this.spd = spd
+        this.time = time
+        this.state = 'ticking'
+        this.num = num
+        this.len = len
+        this.size = 30
+        this.intangible = true
+        this.power = power
+        this.vx = 0
+        this.vy = 0
+
+        this.blocked_up = false
+        this.blocked_down = false
+        this.blocked_left = false
+        this.blocked_right = false
+    }
+
+    update(dt){
+        this.time -= dt
+        if(this.time <= 0){
+            if(this.state == 'exploding'){
+                this.state = 'dead'
+            }
+        }
+
+        if(this.blocked_up){
+            this.vy = Math.max(0, this.vy)
+        }
+        if(this.blocked_down){
+            this.vy = Math.min(0, this.vy)
+        }
+        if(this.blocked_left){
+            this.vx = Math.max(0, this.vx)
+        }
+        if(this.blocked_right){
+            this.vx = Math.min(0, this.vx)
+        }
+
+        this.x += this.vx*dt/1000
+        this.y += this.vy*dt/1000
+        this.vx -= this.vx*dt/1000
+        this.vy -= this.vy*dt/1000
+    }
+}
+
+class Explosion {
+    constructor(x, y, spd, dir, len, power){
+        this.x = x
+        this.y = y
+        this.spd = spd
+        this.dir = dir
+        this.len = len
+        this.max_len = len
+        this.power = power
+    }
+
+    update(dt){
+        var dir = this.dir*Math.PI/180;
+        var dx = Math.cos(dir)*this.spd*dt/1000
+        var dy = Math.sin(dir)*this.spd*dt/1000
+        this.x += dx
+        this.y += dy
+        this.len -= Math.hypot(dx, dy)
+    }
+}
+
+class Block {
+    constructor(x, y){
+        this.x = x
+        this.y = y
+    }
+
+    update(dt){
+
+    }
+}
+
+class Powerup {
+    constructor(x, y, type, label){
+        this.x = x
+        this.y = y
+        this.type = type
+        this.label = label
+        this.indestructable_time = 1000
+    }
+
+    update(dt){
+        if(this.indestructable_time > 0){
+            this.indestructable_time -= dt
+        }
+    }
+}
+
+class Wall {
+    constructor(x, y){
+        this.x = x
+        this.y = y
+    }
+
+    update(dt){
+
+    }
+}
+
+class RoomManager {
+    constructor(rows, cols, client = false){
+        this.players = []
+        this.explosions = []
+        this.blocks = []
+        this.walls = []
+        this.powerups = []
+        this.rows = rows
+        this.cols = cols
+        this.client = client
+    }
+    
+    update(dt){
+        this.players.forEach((p) => {
+            p.update(dt)
+            p.live_bombs.forEach((b) => {
+                b.update(dt)
+
+                if(b.time <= 0 && b.state == 'ticking'){
+                    this.explode(b)
+                }
+            })
+
+            if(p.poop_time > 0){
+                this.dropBomb(p)
+            }
+        })
+        this.explosions.forEach((e) => {
+            e.update(dt)
+        })
+        this.blocks.forEach((b) => {
+            b.update(dt)
+        })
+        this.walls.forEach((w) => {
+            w.update(dt)
+        })
+        this.powerups.forEach((p) => {
+            p.update(dt)
+        })
+        
+        this.checkCollisions(dt)
+    }
+
+    dropBomb(p){
+        if(p.live_bombs.length < p.max_bombs){
+            var bomb_x = Math.round(p.x)
+            var bomb_y = Math.round(p.y)
+            var es = this.getEntitiesAt(bomb_x, bomb_y)
+            var okay = true
+            es.forEach((e) => {
+                okay &= !(e instanceof Wall)
+                okay &= !(e instanceof Block)
+                okay &= !(e instanceof Bomb)
+            })
+            if(okay){
+                var bomb = new Bomb(bomb_x, bomb_y, p.bomb_spd, p.bomb_fuse, p.bomb_len, p.bomb_split, p.bomb_power)
+                p.live_bombs.push(bomb)
+            }
+        }
+    }
+
+    explode(b){
+        b.state = 'exploding'
+        b.time = 250
+        this.createExplosions(b.x, b.y, b.spd, b.num, b.len, b.power)
+    }
+
+    pickUpPower(player, power){
+        if(power.type == 'B+'){
+            player.max_bombs += 1
+        }else if(power.type == 'S+'){
+            player.max_spd += 1
+        }else if(power.type == 'R+'){
+            player.bomb_len += 1
+        }else if(power.type == 'TP'){
+            if(!this.client && this.players.length > 1){
+                var tpi = this.players.indexOf(player)
+                var opi = Math.floor(Math.random()*(this.players.length - 1))
+                if(opi >= tpi){
+                    opi += 1
+                }
+                var x2 = Math.round(this.players[opi].x)
+                var y2 = Math.round(this.players[opi].y)
+                player.x = x2
+                player.y = y2
+                this.players[opi].x = power.x
+                this.players[opi].y = power.y
+            }
+        }else if(power.type == 'PB'){
+            player.bomb_power = true
+        }else if(power.type == '8B'){
+            player.bomb_split = 8
+        }else if(power.type == 'SH'){
+            player.shield_time += 10000
+        }else if(power.type == 'K'){
+            player.bomb_kick = true
+        }else if(power.type == '-1'){
+            player.reverse_time = 10000
+        }else if(power.type == '!'){
+            player.poop_time = 9000
+        }else if(power.type == '*'){
+            player.max_bombs = 8
+            player.max_spd = 7
+            player.bomb_len = 10
+            player.bomb_kick = true
+            player.bomb_split = 8
+            player.bomb_power = true
+        }else if(power.type == '0'){
+            player.max_bombs = 1
+            player.max_spd = 3
+            player.bomb_len = 2
+            player.bomb_kick = false
+            player.bomb_split = 4
+            player.bomb_power = false
+            player.shield_time = 0
+        }else if(power.type == ' '){
+            player.invis_time = 10000
+        }
+    }
+
+    reconcileBombBlockCollision(b, k){
+        if(Math.abs(k.x - b.x) < 1 && Math.abs(k.y - b.y) < 1){
+            var dx = k.x - b.x
+            var dy = k.y - b.y
+            if(Math.hypot(k.x - b.x, k.y - b.y) <= 1.2){
+                // straight on collision, process normally
+                if(Math.abs(dx) > Math.abs(dy)){
+                    if(dx > 0){
+                        b.blocked_right = true
+                    }else{
+                        b.blocked_left = true
+                    }
+                    b.x = Math.round(b.x)
+                    b.vx = 0
+                }else if(Math.abs(dx) < Math.abs(dy)){
+                    if(dy > 0){
+                        b.blocked_down = true
+                    }else{
+                        b.blocked_up = true
+                    }
+                    b.y = Math.round(b.y)
+                    b.vy = 0
+                }
+            }else{
+                // corner collision, slide past
+                // this should never happen since it is a bomb
+                if(abs(b.vx) > 0.001){
+                    b.y = Math.round(b.y)
+                }
+                if(abs(b.vy) > 0.001){
+                    b.x = Math.round(b.x)
+                }
+            }
+        }
+    }
+
+    reconcilePlayerBlockCollision(p, b){
+        var dx = b.x - p.x
+        var dy = b.y - p.y
+        if(Math.abs(dx) < 0.9 && Math.abs(dy) < 0.9){
+            if(Math.hypot(dx, dy) < 0.925){
+                // straight on collision, process normally
+                if(Math.abs(dx) > Math.abs(dy)){
+                    if(dx > 0){
+                        p.blocked_right = true
+                    }else{
+                        p.blocked_left = true
+                    }
+                }else{
+                    if(dy > 0){
+                        p.blocked_down = true
+                    }else{
+                        p.blocked_up = true
+                    }
+                }
+            }else{
+                // corner collision, slide past if able
+                var adjx = Math.round(p.x)
+                var adjy = Math.round(p.y)
+                if(p.direction == 0 && p.x <= this.cols - 1){
+                    var es = this.getEntitiesAt(adjx + 1, adjy)
+                    var adj_clear = true
+                    es.forEach((e) => {
+                        adj_clear &= !(e instanceof Block) && !(e instanceof Wall) && !(e instanceof Bomb)
+                    })
+
+                    if(adj_clear && adjy > p.y && adjy <= this.rows){
+                        p.slide_dir = 90
+                    }else if(adj_clear && adjy < p.y && adjy >= 1){
+                        p.slide_dir = 270
+                    }
+                    p.blocked_right = true
+                    
+                }else if(p.direction == 90 && p.y <= this.rows - 1){
+                    var es = this.getEntitiesAt(adjx, adjy + 1)
+                    var adj_clear = true
+                    es.forEach((e) => {
+                        adj_clear &= !(e instanceof Block) && !(e instanceof Wall) && !(e instanceof Bomb)
+                    })
+                    
+                    if(adj_clear && adjx > p.x && adjx <= this.cols){
+                        p.slide_dir = 0
+                    }else if(adj_clear && adjx < p.x && adjx >= 1){
+                        p.slide_dir = 180
+                    }
+                    p.blocked_down = true
+                    
+                }else if(p.direction == 180 && p.x >= 2){
+                    var es = this.getEntitiesAt(adjx - 1, adjy)
+                    var adj_clear = true
+                    es.forEach((e) => {
+                        adj_clear &= !(e instanceof Block) && !(e instanceof Wall) && !(e instanceof Bomb)
+                    })
+                    
+                    if(adj_clear && adjy > p.y && adjy <= this.rows){
+                        p.slide_dir = 90
+                    }else if(adj_clear && adjy < p.y && adjy >= 1){
+                        p.slide_dir = 270
+                    }
+                    p.blocked_left = true
+                    
+                }else if(p.direction == 270 && p.y >= 2){
+                    var es = this.getEntitiesAt(adjx, adjy - 1)
+                    var adj_clear = true
+                    es.forEach((e) => {
+                        adj_clear &= !(e instanceof Block) && !(e instanceof Wall) && !(e instanceof Bomb)
+                    })
+                    
+                    if(adj_clear && adjx > p.x && adjx <= this.cols){
+                        p.slide_dir = 0
+                    }else if(adj_clear && adjx < p.x && adjx >= 1){
+                        p.slide_dir = 180
+                    }
+                    p.blocked_up = true
+
+                }
+            }
+        }
+    }
+
+    reconcilePlayerBombCollision(p, b, own_bomb){
+        var on_bomb = false
+        if(Math.hypot(b.x - p.x, b.y - p.y) < 1){
+            on_bomb = true
+            if(!(b.intangible && own_bomb)){
+                // straight on collision, process normally
+                var dx = b.x - p.x
+                var dy = b.y - p.y
+                if(Math.abs(dx) > Math.abs(dy)){
+                    if(dx > 0){
+                        p.blocked_right = true
+                        if(p.bomb_kick && p.direction == 0 && p.spd > 0){
+                            b.vx = p.spd + 3
+                        }else{
+                            b.vx = 0
+                        }
+                    }else{
+                        p.blocked_left = true
+                        if(p.bomb_kick && p.direction == 180 && p.spd > 0){
+                            b.vx = -(p.spd + 3)
+                        }else{
+                            b.vx = 0
+                        }
+                    }
+                }else{
+                    if(dy > 0){
+                        p.blocked_down = true
+                        if(p.bomb_kick && p.direction == 90 && p.spd > 0){
+                            b.vy = p.spd + 3
+                        }else{
+                            b.vy = 0
+                        }
+                    }else{
+                        p.blocked_up = true
+                        if(p.bomb_kick && p.direction == 270 && p.spd > 0){
+                            b.vy = -(p.spd + 3)
+                        }else{
+                            b.vy = 0
+                        }
+                    }
+                }
+            }
+        }
+        if(own_bomb){
+            b.intangible &= on_bomb
+        }
+    }
+
+    checkCollisions(dt){
+        // explosions on walls
+        for(var i = this.explosions.length - 1; i >= 0; i--){
+            for(var j = this.walls.length - 1; j >= 0; j--){
+                var d = Math.hypot(this.walls[j].x - this.explosions[i].x, this.walls[j].y - this.explosions[i].y)
+                if(d < 0.5){
+                    this.explosions.splice(i, 1)
+                    break;
+                }
+            }
+        }
+            
+        // explosions on blocks
+        for(var i = this.explosions.length - 1; i >= 0; i--){
+            for(var j = this.blocks.length - 1; j >= 0; j--){
+                var d = Math.hypot(this.blocks[j].x - this.explosions[i].x, this.blocks[j].y - this.explosions[i].y)
+                if(d < 0.5){
+                    if(!this.explosions[i].power){
+                        this.explosions.splice(i, 1)
+                    }
+                    if(!this.client && Math.random()*10 < 4){
+                        this.createPowerUp(this.blocks[j].x, this.blocks[j].y)
+                    }
+                    this.blocks.splice(j, 1)
+                    break;
+                }
+            }
+        }
+        
+        // explosions on powerups
+        for(var i = this.explosions.length - 1; i >= 0; i--){
+            for(var j = this.powerups.length - 1; j >= 0; j--){
+                var d = Math.hypot(this.powerups[j].x - this.explosions[i].x, this.powerups[j].y - this.explosions[i].y)
+                if(d < 0.25 && this.powerups[j].indestructable_time <= 0){
+                    this.powerups.splice(j, 1)
+                    if(!this.explosions[i].power){
+                        this.explosions.splice(i, 1)
+                        break
+                    }
+                }
+            }
+        }
+        
+        // explosions on players
+        for(var i = this.explosions.length - 1; i >= 0; i--){
+            for(var j = this.players.length - 1; j >= 0; j--){
+                var d = Math.hypot(this.players[j].x - this.explosions[i].x, this.players[j].y - this.explosions[i].y)
+                if(d < 0.25 && this.players[j].shield_time <= 0){
+                    this.players[j].live_bombs.forEach((b) => {
+                        if(b.state == 'ticking'){
+                            this.explode(b)
+                        }
+                    })
+                    this.players.splice(j, 1)
+                }
+            }
+        }
+        
+        // players and bombs
+        this.players.forEach((p) => {
+
+            p.blocked_right = false
+            p.blocked_left = false
+            p.blocked_up = false
+            p.blocked_down = false
+            
+            // explosions on bombs
+            for(var i = p.live_bombs.length - 1; i >= 0; i--){
+                for(var j = 0; j < this.explosions.length; j++){
+                    if(p.live_bombs[i].state == 'ticking'){
+                        var d = Math.hypot(this.explosions[j].x - p.live_bombs[i].x, this.explosions[j].y - p.live_bombs[i].y)
+                        if(d < 0.5){
+                            this.explode(p.live_bombs[i])
+                        }
+                    }
+                }
+            }
+            
+            // players on bombs
+            p.live_bombs.forEach((b) => {
+                this.reconcilePlayerBombCollision(p, b, true)
+                p.live_bombs.forEach((b2) => {
+                    if(b != b2){
+                        this.reconcileBombBlockCollision(b, b2)
+                    }
+                })
+            })
+            this.players.forEach((p2) => {
+                p2.live_bombs.forEach((b) => {
+                    if(p != p2){
+                        this.reconcilePlayerBombCollision(p, b, false)
+                        p.live_bombs.forEach((b2) => {
+                            this.reconcileBombBlockCollision(b, b2)
+                        })
+                    }
+                    b.blocked_up = false
+                    b.blocked_down = false
+                    b.blocked_left = false
+                    b.blocked_right = false
+                    this.blocks.forEach((k) => {
+                        this.reconcileBombBlockCollision(b, k)
+                    })
+                    this.walls.forEach((k) => {
+                        this.reconcileBombBlockCollision(b, k)
+                    })
+                })
+            })
+            
+            // players pickup powerups
+            for(var i = this.powerups.length - 1; i >= 0; i--){
+                var d = Math.hypot(p.x - this.powerups[i].x, p.y - this.powerups[i].y)
+                if(d < 0.5){
+                    this.pickUpPower(p, this.powerups[i])
+                    this.powerups.splice(i, 1)
+                }
+            }
+            
+            // players out of bounds
+            if(p.x < 1){
+                p.blocked_left = true
+                p.x = Math.max(p.x, 1)
+                if(p.direction == 180){
+                    p.spd = 0
+                }
+            }
+            if(p.x > this.cols){
+                p.blocked_right = true
+                p.x = Math.min(p.x, this.cols)
+                if(p.direction == 0){
+                    p.spd = 0
+                }
+            }
+            if(p.y < 1){
+                p.blocked_up = true
+                p.y = Math.max(p.y, 1)
+                if(p.direction == 270){
+                    p.spd = 0
+                }
+            }
+            if(p.y > this.rows){
+                p.blocked_down = true
+                p.y = Math.min(p.y, this.rows)
+                if(p.direction == 90){
+                    p.spd = 0
+                }
+            }
+            
+            // bombs out of bounds
+            p.live_bombs.forEach((b) => {
+                if((b.x < 1) || (b.x > this.cols)){
+                    b.vx = 0
+                    b.x = Math.max(b.x, 1)
+                    b.x = Math.min(b.x, this.cols)
+                }
+                if((b.y < 1) || (b.y > this.rows)){
+                    b.vy = 0
+                    b.y = Math.max(b.y, 1)
+                    b.y = Math.min(b.y, this.rows)
+                }
+            })
+        })
+
+        // players on blocks and walls
+        this.players.forEach((p) => {
+            p.slide_dir = -1
+            this.blocks.forEach((b) => {
+                this.reconcilePlayerBlockCollision(p, b)
+            })
+
+            this.walls.forEach((w) => {
+                this.reconcilePlayerBlockCollision(p, w)
+            })
+        })
+        
+        // clear dead explosions and explosions out of bounds
+        for(var i = this.explosions.length - 1; i >= 0; i--){
+            if(this.explosions[i].x < 0 || this.explosions[i].y < 0 
+                || this.explosions[i].x > this.cols + 1 || this.explosions[i].y > this.rows + 1
+                || this.explosions[i].len < 0){
+
+                this.explosions.splice(i, 1)
+            }
+        }
+    }
+
+    createExplosions(x, y, spd, num, len, power){
+        for(var i = 0; i < num; i++){
+            var dir = 360/num*i
+            var explosion = new Explosion(x, y, spd, dir, len, power)
+            this.explosions.push(explosion)
+        }
+    }
+
+    createBlock(x, y){
+        var block = new Block(x, y)
+        this.blocks.push(block)
+        return block
+    }
+
+    createWall(x, y){
+        var wall = new Wall(x, y)
+        this.walls.push(wall)
+        return wall
+    }
+
+    createPowerUp(x, y, type = 'random'){
+        var label = type
+        if(type == 'random'){
+            var r = Math.floor(Math.random()*35)
+            if(r >= 0 && r < 6){
+                type = 'B+'
+                label = 'B+'
+            }else if(r >= 6 && r < 12){
+                type = 'R+'
+                label = 'R+'
+            }else if(r >= 12 && r < 18){
+                type = 'S+'
+                label = 'S+'
+            }else if(r >= 18 && r < 20){
+                type = 'K'
+                label = 'K'
+            }else if(r >= 20 && r < 22){
+                type = 'PB'
+                label = 'PB'
+            }else if(r >= 22 && r < 24){
+                type = '8B'
+                label = '8B'
+            }else if(r >= 24 && r < 27){
+                type = 'SH'
+                label = 'SH'
+            }else if(r >= 27 && r < 29){
+                type = 'TP'
+                label = 'TP'
+            }else if(r >= 29 && r < 31){
+                type = '-1'
+                label = '!'
+            }else if(r >= 31 && r < 33){
+                type = '!'
+                label = '!'
+            }else if(r >= 33 && r < 34){
+                type = '0'
+                label = '!'
+            }else if(r >= 34 && r < 35){
+                type = ' '
+                label = ' '
+            }
+
+            if(Math.random()*5 < 1){
+                label = '?'
+                if(type != '0' && Math.floor(Math.random()*16) < 1){
+                    type = '*'
+                }
+            }
+        }
+
+        var pup = new Powerup(x, y, type, label)
+        this.powerups.push(pup)
+        return pup
+    }
+
+    addPlayer(player){
+        this.players.push(player)
+        // remove blocks next to player
+        for(var i = this.blocks.length - 1; i >= 0; i--){
+            var d = Math.hypot(this.blocks[i].x - player.x, this.blocks[i].y - player.y)
+            if(d < 2){
+                this.blocks.splice(i,1)
+            }
+        }
+    }
+
+    getEntitiesAt(x, y){
+        var e = []
+        this.explosions.forEach((s) => {
+            if(Math.hypot(x - s.x, y - s.y) < 0.5){
+                e.push(x)
+            }
+        })
+        this.powerups.forEach((p) => {
+            if(Math.hypot(x - p.x, y - p.y) < 0.5){
+                e.push(p)
+            }
+        })
+        this.players.forEach((p) => {
+            p.live_bombs.forEach((b) => {
+                if(Math.hypot(x - b.x, y - b.y) < 0.5){
+                    e.push(b)
+                }
+            })
+            
+            if(Math.hypot(x - p.x, y - p.y) < 0.5){
+                e.push(p)
+            }
+        })
+        this.blocks.forEach((b) => {
+            if(Math.hypot(x - b.x, y - b.y) < 0.5){
+                e.push(b)
+            }
+        })
+        this.walls.forEach((w) => {
+            if(Math.hypot(x - w.x, y - w.y) < 0.5){
+                e.push(w)
+            }
+        })
+        return e
+    }
+
+    clearEntity(e){
+        if(e instanceof Block){
+            this.blocks.splice(this.blocks.indexOf(e), 1)
+        }else if(e instanceof Wall){
+            this.walls.splice(this.walls.indexOf(e), 1)
+        }else if(e instanceof Powerup){
+            this.powerups.splice(this.powerups.indexOf(e), 1)
+        }else if(e instanceof Explosion){
+            this.explosions.splice(this.explosions.indexOf(e), 1)
+        }else if(e instanceof Bomb){
+            this.explode(e)
+        }else if(e instanceof Avatar){
+            this.players.splice(this.players.indexOf(e), 1)
+        }
+    }
+
+    clearAll(){
+        this.players = []
+        this.explosions = []
+        this.blocks = []
+        this.walls = []
+        this.powerups = []   
+    }
+}
+
+const CLOSING_TIME = 60000
+const CLOSING_RATE = 700
+
+const ROWS = 13
+const COLS = 17
+
+const SPAWN_Y = [[7], [7, 7], [13, 1, 13], [1, 1, 13, 13], [1, 1, 13, 13, 7], [1, 3, 3, 11, 11, 13], [1, 3, 3, 11, 11, 13, 7], [1, 1, 13, 13, 1, 13, 7, 7], [1, 1, 13, 13, 1, 13, 7, 7, 7], [1, 1, 13, 13, 1, 13, 4, 4, 10, 10]]
+const SPAWN_X = [[9], [1, 17], [1, 9, 17], [1, 17, 1, 17], [1, 17, 1, 17, 9], [9, 1, 17, 1, 17, 9], [9, 1, 17, 1, 17, 9, 9], [1, 17, 1, 17, 9, 9, 5, 13], [1, 17, 1, 17, 9, 9, 3, 9, 15], [1, 17, 1, 17, 9, 9, 5, 13, 5, 13]]
+const COLORS = ['GhostWhite', 'Gold', 'Green', 'FireBrick', 'MidnightBlue', 'DeepPink', 'Chartreuse', 'CornflowerBlue', 'OldLace', 'Purple']
+
+export default class {
+    constructor(client = false){
+        this.all_players = {}
+        this.scores = {}
+        this.state = 'wait'
+        this.client = client
+        this.lobby = new RoomManager(ROWS, COLS, client)
+        this.arena = new RoomManager(ROWS, COLS, client)
+        this.time = 0
+        this.color_choices = COLORS
+
+        // arena closing states
+        this.cxmin = 1
+        this.cxmax = this.arena.cols
+        this.cymin = 1
+        this.cymax = this.arena.rows
+        this.cd = 0
+        this.cx = 1
+        this.cy = 1
+        this.cn = 0
+    }
+
+    get numPlayers(){
+        return Object.keys(this.all_players).length
+    }
+
+    sync(json){
+        var was_client = this.client
+        Object.assign(this, json)
+        Object.setPrototypeOf(this.lobby, RoomManager.prototype)
+        Object.setPrototypeOf(this.arena, RoomManager.prototype)
+        this.client = was_client
+        this.lobby.client = was_client
+        this.arena.client = was_client
+
+        for(var id in this.all_players){
+            Object.setPrototypeOf(this.all_players[id], Avatar.prototype)
+        }
+
+        this.lobby.players.forEach((p) => {
+            Object.setPrototypeOf(p, Avatar.prototype)
+            p.live_bombs.forEach((b) => {
+                Object.setPrototypeOf(b, Bomb.prototype)
+            })
+        })
+
+        this.lobby.explosions.forEach((e) => {
+            Object.setPrototypeOf(e, Explosion.prototype)
+        })
+
+        this.lobby.blocks.forEach((b) => {
+            Object.setPrototypeOf(b, Block.prototype)
+        })
+
+        this.lobby.walls.forEach((w) => {
+            Object.setPrototypeOf(w, Wall.prototype)
+        })
+
+        this.lobby.powerups.forEach((p) => {
+            Object.setPrototypeOf(p, Powerup.prototype)
+        })
+
+        this.arena.players.forEach((p) => {
+            Object.setPrototypeOf(p, Avatar.prototype)
+            p.live_bombs.forEach((b) => {
+                Object.setPrototypeOf(b, Bomb.prototype)
+            })
+        })
+
+        this.arena.explosions.forEach((e) => {
+            Object.setPrototypeOf(e, Explosion.prototype)
+        })
+
+        this.arena.blocks.forEach((b) => {
+            Object.setPrototypeOf(b, Block.prototype)
+        })
+
+        this.arena.walls.forEach((w) => {
+            Object.setPrototypeOf(w, Wall.prototype)
+        })
+
+        this.arena.powerups.forEach((p) => {
+            Object.setPrototypeOf(p, Powerup.prototype)
+        })
+    }
+
+    addPlayer(id){
+        if(this.numPlayers < 10){
+            var c = this.color_choices.shift()
+            this.all_players[id] = new Avatar(Math.floor(Math.random()*(this.lobby.cols - 7)) + 4, Math.floor(Math.random()*(this.lobby.rows - 5)) + 4, c)
+            this.lobby.addPlayer(this.all_players[id])
+            this.scores[id] = 0
+        }
+    }
+
+    removePlayer(id){
+        var avatar = this.all_players[id]
+        if(avatar){
+            var lai = this.lobby.players.indexOf(avatar)
+            if(lai > -1){
+                this.lobby.players.splice(lai, 1)
+            }
+            var aai = this.arena.players.indexOf(avatar)
+            if(aai > -1){
+                this.arena.players.splice(aai, 1)
+            }
+            this.color_choices.unshift(avatar.color)
+            delete this.all_players[id]
+        }
+        delete this.scores[id]
+    }
+
+    handleInput(id, input){
+        var avatar = this.all_players[id]
+        if(avatar){
+            if(input.press){
+                if(input.x == 2){
+                    avatar.dirs.push(180)
+                    avatar.spd_sp = avatar.max_spd
+                }else if(input.x == 0){
+                    avatar.dirs.push(0)
+                    avatar.spd_sp = avatar.max_spd
+                }else if(input.x == 3){
+                    avatar.dirs.push(270)
+                    avatar.spd_sp = avatar.max_spd
+                }else if(input.x == 1){
+                    avatar.dirs.push(90)
+                    avatar.spd_sp = avatar.max_spd
+                }else if(input.x == 4){
+                    var aai = this.arena.players.indexOf(avatar)
+                    if(aai > -1){
+                        this.arena.dropBomb(avatar)
+                    }
+                }
+            }else{
+                var ddi = -1
+                if(input.x == 2){
+                    ddi = avatar.dirs.indexOf(180)
+                    avatar.last_dir = 180
+                }else if(input.x == 0){
+                    ddi = avatar.dirs.indexOf(0)
+                    avatar.last_dir = 0
+                }else if(input.x == 3){
+                    ddi = avatar.dirs.indexOf(270)
+                    avatar.last_dir = 270
+                }else if(input.x == 1){
+                    ddi = avatar.dirs.indexOf(90)
+                    avatar.last_dir = 90
+                }
+                if(ddi > -1){
+                    avatar.dirs.splice(ddi, 1)
+                }
+                
+                if(avatar.dirs.length == 0){
+                    avatar.spd_sp = 0;
+                }
+            }
+        }
+    }
+
+    startGame(){
+        this.lobby.clearAll()
+        this.arena.clearAll()
+
+        for(var i = 1; i <= this.arena.rows; i++){
+            for(var j = 1; j <= this.arena.cols; j++){
+                if(i % 2 == 0 && j % 2 == 0){
+                    this.arena.createWall(j, i)
+                }else if(!this.client){
+                    var k = Math.random()*7
+                    if(k <= 6){
+                        this.arena.createBlock(j, i)
+                    }
+                }
+            }
+        }
+        this.cxmin = 1
+        this.cxmax = this.arena.cols
+        this.cymin = 1
+        this.cymax = this.arena.rows
+
+        this.cd = Math.floor(Math.random()*4)
+        if(this.cd == 0 || this.client){
+            this.cx = 1
+            this.cy = 1
+        }else if(this.cd == 1){
+            this.cx = this.arena.cols
+            this.cy = 1
+        }else if(this.cd == 2){
+            this.cx = this.arena.cols
+            this.cy = this.arena.rows
+        }else if(this.cd == 3){
+            this.cx = 1
+            this.cy = this.arena.rows
+        }
+        this.cn = 0
+
+        var spawnx = [...SPAWN_X[this.numPlayers - 1]]
+        var spawny = [...SPAWN_Y[this.numPlayers - 1]]
+        // shuffle spawn points
+        for(var i = spawnx.length - 1; i > 0; i--){
+            var j = Math.floor(Math.random() * (i + 1))
+            var a = spawnx[j]
+            spawnx[j] = spawnx[i]
+            spawnx[i] = a
+            a = spawny[j]
+            spawny[j] = spawny[i]
+            spawny[i] = a
+        }
+
+        for(var id in this.all_players){
+            var c = this.all_players[id].color
+
+            this.all_players[id] = new Avatar(spawnx.pop(), spawny.pop(), c)
+            this.arena.addPlayer(this.all_players[id])
+        }
+    }
+    
+    endGame(){
+        // move all players into the lobby
+        for(var id in this.all_players){
+            if(this.lobby.players.indexOf(this.all_players[id]) < 0){
+                var c = this.all_players[id].color
+                this.all_players[id] = new Avatar(Math.floor(Math.random()*(this.lobby.cols - 7)) + 4, Math.floor(Math.random()*(this.lobby.rows - 5)) + 4, c)
+                this.all_players[id].max_bombs = 0
+                this.lobby.addPlayer(this.all_players[id])
+            }
+        }
+    }
+
+    update(dt){
+        if(this.state == 'play'){
+            if(this.arena.players.length <= 1){
+                this.state = 'endgame'
+                this.time = 0
+            }else{
+                var T = this.time - CLOSING_TIME
+                if(T > 0){
+                    var n = Math.floor(T/CLOSING_RATE)
+                    this.closeArena(n)
+                }
+            }
+            this.time += dt
+            this.arena.update(dt)
+            
+        }else if(this.state == 'endgame'){
+            if(this.time > 2000){
+                this.state = 'wait'
+                this.time = 0
+                var winners = [...this.arena.players]
+                winners.forEach((p) => {
+                    for(var id in this.all_players){
+                        if(p == this.all_players[id]){
+                            this.scores[id] += 1
+                        }
+                    }
+                })
+                
+                this.arena.clearAll()
+                this.endGame()
+            }else{
+                this.time += dt
+                this.arena.update(dt)
+            }
+            
+        }else if(this.state == 'wait'){
+            var ready = 0
+            this.lobby.players.forEach((p) => {
+                if(p.y <= 3){
+                    ready += 1;
+                }
+            })
+            if(this.numPlayers > 1 && ready >= this.numPlayers){
+                this.state = 'play'
+                this.startGame()
+            }
+            this.lobby.update(dt)
+        }
+    }
+
+    closeArena(n){
+        if(n <= this.arena.cols*this.arena.rows && n > this.cn){
+            var es = this.arena.getEntitiesAt(this.cx, this.cy)
+            es.forEach((e) => {
+                this.arena.clearEntity(e)
+            })
+            this.arena.createWall(this.cx, this.cy)
+    
+            if(this.cd == 0){
+                if(this.cx >= this.cxmax){
+                    this.cd = 1
+                    this.cy += 1
+                    this.cymin += 1
+                }else{
+                    this.cx += 1
+                }
+            }else if(this.cd == 1){
+                if(this.cy >= this.cymax){
+                    this.cd = 2
+                    this.cx -= 1
+                    this.cxmax -= 1
+                }else{
+                    this.cy += 1
+                }
+            }else if(this.cd == 2){
+                if(this.cx <= this.cxmin){
+                    this.cd = 3
+                    this.cy -= 1
+                    this.cymax -= 1
+                }else{
+                    this.cx -= 1
+                }
+            }else if(this.cd == 3){
+                if(this.cy <= this.cymin){
+                    this.cd = 0
+                    this.cx += 1
+                    this.cxmin += 1
+                }else{
+                    this.cy -= 1
+                }
+            }
+            this.cn = n
+        }
+    }
+}
