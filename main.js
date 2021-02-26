@@ -1,14 +1,16 @@
 const express = require('express')
 const app = express()
-const fs = require('fs');
-const https = require('https');
+const fs = require('fs')
+// const https = require('https')
+const http = require('http')
 
 // certificates
-const server = https.createServer({
-    cert: fs.readFileSync('certificates/fullchain.pem'),
-	key: fs.readFileSync('certificates/privkey.pem'),
-	ca: fs.readFileSync('certificates/chain.pem')
-}, app)
+// const server = https.createServer({
+    // cert: fs.readFileSync('certificates/fullchain.pem'),
+	// key: fs.readFileSync('certificates/privkey.pem'),
+	// ca: fs.readFileSync('certificates/chain.pem')
+// }, app)
+const server = http.createServer(app)
 
 const io = require('socket.io')(server)
 
@@ -47,13 +49,13 @@ io.on('connection', socket => {
     }, GAME_INTERVAL)
 })
 
-app.use (function (req, res, next) {
-    if (!req.secure) {
-        // request was via http, so redirect to https
-        res.redirect('https://' + req.headers.host + req.url);
-    }
-    next();
-});
+// app.use (function (req, res, next) {
+    // if (!req.secure) {
+        // // request was via http, so redirect to https
+        // res.redirect('https://' + req.headers.host + req.url);
+    // }
+    // next();
+// });
 
 server.listen(7000)
 
