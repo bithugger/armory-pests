@@ -1,5 +1,7 @@
 import Game from './armory-pests-game.mjs'
+import ParticleSystem from './particles.mjs'
 const game = new Game(true)
+const particles = new ParticleSystem()
 
 var SQUARE_SIZE = Math.min(window.innerWidth/(game.arena.cols + 2), window.innerHeight/(game.arena.rows + 2))
 var SCREEN_WIDTH = (game.arena.cols + 1)*SQUARE_SIZE
@@ -7,10 +9,50 @@ var SCREEN_HEIGHT = (game.arena.rows + 1)*SQUARE_SIZE
 var showIntro = true
 var gameReady = false
 
+// screen shake effect
+var ss_px = 0
+var ss_vx = 0
+var ss_py = 0
+var ss_vy = 0
+const SS_BX = 1/9
+const SS_BY = 1/7
+const SS_KX = 1/3
+const SS_KY = 1/3
+game.on('explode', (b) => {
+    let d = random(0, 360)*2*PI/360
+    if(b.power){
+        ss_vx = cos(d)*b.len/10
+        ss_vy = sin(d)*b.len/8
+    }else{
+        ss_vx = cos(d)*b.len/50
+        ss_vy = sin(d)*b.len/40
+    }
+})
+
+// teleport effect
+game.on('teleport', (ps) => {
+    let p1 = ps[0]
+    let p2 = ps[1]
+    let d = Math.hypot(p1.x - p2.x, p1.y - p2.y)
+    for(let i = 0; i < d; i += 0.5){
+        let s = i/d
+        let x2 = p2.x + s*(p1.x - p2.x)
+        let y2 = p2.y + s*(p1.y - p2.y)
+
+        particles.add(x2, y2, randomGaussian(0, 0.1), randomGaussian(0, 0.1), 0.4, s*500)
+    }
+})
+
 // local game update
 const LOCAL_GAME_INTERVAL = 16 // ms
 function gameStep(){
     game.update(LOCAL_GAME_INTERVAL)
+    particles.update(LOCAL_GAME_INTERVAL)
+
+    ss_px += ss_vx
+    ss_py += ss_vy
+    ss_vx -= SS_KX*ss_px + SS_BX*ss_vx
+    ss_vy -= SS_KY*ss_py + SS_BY*ss_vy
 }
 
 // input delay target
@@ -207,6 +249,7 @@ function drawBomb(b){
 }
 
 function drawExplosion(e){
+    particles.add(e.x, e.y, randomGaussian(0, 1), randomGaussian(0, 1), 0.2, 300)
     push()
     rectMode(CENTER)
     if(e.power){
@@ -214,7 +257,7 @@ function drawExplosion(e){
     }else{
         fill(255)
     }
-    let tail_len = Math.min(Math.max(e.max_len - e.len, 0), e.max_len/4)
+    let tail_len = Math.min(Math.max(e.max_len - e.len, 0), 1)
     translate(e.x, e.y)
 
     rotate(e.dir*Math.PI/180)
@@ -265,6 +308,10 @@ function drawObjects(m){
     stroke(60)
     strokeWeight(1/30)
     scale(SQUARE_SIZE)
+
+    // screen shake effect
+    translate(ss_px, ss_py)
+
     m.blocks.forEach((b) => {
         drawBlock(b)
     })
@@ -274,6 +321,7 @@ function drawObjects(m){
     m.powerups.forEach((p) => {
         drawPowerUp(p)
     })
+    particles.draw()
     m.players.forEach((p) => {
         p.live_bombs.forEach((b) => {
             drawBomb(b)
@@ -330,7 +378,7 @@ function drawScores(m){
 }
 
 function drawLobby(){
-    background(0)
+    background(color(0))
 
     push()
     stroke(120)
@@ -362,11 +410,12 @@ function drawLobby(){
 }
 
 function drawPlaying(){
-    background(150)
+    background(color(150))
     
     push()
-    stroke(120)
     scale(SQUARE_SIZE)
+    
+    stroke(120)
     strokeWeight(1/30)
     for(let i = 0; i <= game.arena.rows; i++){
         line(1/2, i + 0.5, game.arena.cols + 1/2, i + 0.5)
@@ -376,9 +425,9 @@ function drawPlaying(){
         line(j + 0.5, 1/2, j + 0.5, game.arena.rows + 1/2)
     }
     pop()
-
+    
     drawObjects(game.arena)
-
+    
     if(game.state == 'endgame'){
         push()
         scale(SQUARE_SIZE)

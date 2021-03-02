@@ -5,7 +5,7 @@ class Avatar {
         this.color = c
         
         // stats
-        this.max_spd = 3
+        this.max_spd = 2.5
         this.max_bombs = 1
         this.bomb_len = 2
         this.bomb_spd = 10
@@ -62,7 +62,7 @@ class Avatar {
         var spd_err = this.spd_sp - this.spd;
         var spd = this.spd + Math.sign(spd_err)*Math.min(Math.abs(spd_err), this.max_spd/3)
         spd = Math.max(Math.min(spd, this.max_spd), 0)
-        spd = Math.min(spd, 9)
+        spd = Math.min(spd, 7.5)
         
         if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 180) 
             || (this.blocked_down && d1 == 90) || (this.blocked_up && d1 == 270)){
@@ -216,6 +216,13 @@ class RoomManager {
         this.rows = rows
         this.cols = cols
         this.client = client
+        this.cbq = []
+    }
+
+    fireEvent(ev, args){
+        if(!this.client){
+            this.cbq.push({'ev': ev, 'args': args})
+        }
     }
     
     update(dt){
@@ -271,6 +278,7 @@ class RoomManager {
         b.state = 'exploding'
         b.time = 250
         this.createExplosions(b.x, b.y, b.spd, b.num, b.len, b.power)
+        this.fireEvent('explode', b)
     }
 
     pickUpPower(player, power){
@@ -293,6 +301,7 @@ class RoomManager {
                 player.y = y2
                 this.players[opi].x = power.x
                 this.players[opi].y = power.y
+                this.fireEvent('teleport', [player, this.players[opi]])
             }
         }else if(power.type == 'PB'){
             player.bomb_power = true
@@ -308,14 +317,14 @@ class RoomManager {
             player.poop_time = 9000
         }else if(power.type == '*'){
             player.max_bombs = 8
-            player.max_spd = 7
+            player.max_spd = 7.5
             player.bomb_len = 10
             player.bomb_kick = true
             player.bomb_split = 8
             player.bomb_power = true
         }else if(power.type == '0'){
             player.max_bombs = 1
-            player.max_spd = 3
+            player.max_spd = 2.5
             player.bomb_len = 2
             player.bomb_kick = false
             player.bomb_split = 4
@@ -527,7 +536,7 @@ class RoomManager {
         for(var i = this.explosions.length - 1; i >= 0; i--){
             for(var j = this.powerups.length - 1; j >= 0; j--){
                 var d = Math.hypot(this.powerups[j].x - this.explosions[i].x, this.powerups[j].y - this.explosions[i].y)
-                if(d < 0.25 && this.powerups[j].indestructable_time <= 0){
+                if(d < 0.33 && this.powerups[j].indestructable_time <= 0){
                     this.powerups.splice(j, 1)
                     if(!this.explosions[i].power){
                         this.explosions.splice(i, 1)
@@ -541,12 +550,13 @@ class RoomManager {
         for(var i = this.explosions.length - 1; i >= 0; i--){
             for(var j = this.players.length - 1; j >= 0; j--){
                 var d = Math.hypot(this.players[j].x - this.explosions[i].x, this.players[j].y - this.explosions[i].y)
-                if(d < 0.25 && this.players[j].shield_time <= 0){
+                if(d < 0.33 && this.players[j].shield_time <= 0){
                     this.players[j].live_bombs.forEach((b) => {
                         if(b.state == 'ticking'){
                             this.explode(b)
                         }
                     })
+                    this.fireEvent('died', this.players[j])
                     this.players.splice(j, 1)
                 }
             }
@@ -725,8 +735,8 @@ class RoomManager {
                 type = 'SH'
                 label = 'SH'
             }else if(r >= 27 && r < 29){
-                type = 'TP'
-                label = 'TP'
+                type = ' '
+                label = ' '
             }else if(r >= 29 && r < 31){
                 type = '-1'
                 label = '!'
@@ -737,13 +747,13 @@ class RoomManager {
                 type = '0'
                 label = '!'
             }else if(r >= 34 && r < 35){
-                type = ' '
-                label = ' '
+                type = 'TP'
+                label = 'TP'
             }
 
             if(Math.random()*5 < 1){
                 label = '?'
-                if(type != '0' && Math.floor(Math.random()*16) < 1){
+                if(type != '0' && Math.floor(Math.random()*20) < 1){
                     type = '*'
                 }
             }
@@ -822,7 +832,8 @@ class RoomManager {
         this.explosions = []
         this.blocks = []
         this.walls = []
-        this.powerups = []   
+        this.powerups = []
+        this.cbq = []
     }
 }
 
@@ -846,6 +857,7 @@ export default class {
         this.arena = new RoomManager(ROWS, COLS, client)
         this.time = 0
         this.color_choices = COLORS
+        this.callbacks = {}
 
         // arena closing states
         this.cxmin = 1
@@ -862,14 +874,25 @@ export default class {
         return Object.keys(this.all_players).length
     }
 
+    on(ev, cb){
+        if(!this.callbacks[ev]){
+            this.callbacks[ev] = []
+        }
+        this.callbacks[ev].push(cb)
+    }
+
     sync(json){
-        var was_client = this.client
+        let was_client = this.client
+        let levi = this.lobby.cbq.length
+        let aevi = this.arena.cbq.length
+        let old_callbacks = this.callbacks
         Object.assign(this, json)
         Object.setPrototypeOf(this.lobby, RoomManager.prototype)
         Object.setPrototypeOf(this.arena, RoomManager.prototype)
         this.client = was_client
         this.lobby.client = was_client
         this.arena.client = was_client
+        this.callbacks = old_callbacks
 
         for(var id in this.all_players){
             Object.setPrototypeOf(this.all_players[id], Avatar.prototype)
@@ -920,6 +943,24 @@ export default class {
         this.arena.powerups.forEach((p) => {
             Object.setPrototypeOf(p, Powerup.prototype)
         })
+
+        for(let i = levi; i < this.lobby.cbq.length; i++){
+            let ea = this.lobby.cbq[i]
+            if(this.callbacks[ea.ev]){
+                this.callbacks[ea.ev].forEach((cb) => {
+                    cb(ea.args)
+                })
+            }
+        }
+
+        for(let i = aevi; i < this.arena.cbq.length; i++){
+            let ea = this.arena.cbq[i]
+            if(this.callbacks[ea.ev]){
+                this.callbacks[ea.ev].forEach((cb) => {
+                    cb(ea.args)
+                })
+            }
+        }
     }
 
     addPlayer(id){
