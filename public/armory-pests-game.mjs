@@ -1040,6 +1040,9 @@ export default class {
     startGame(){
         this.lobby.clearAll()
         this.arena.clearAll()
+        if(!this.client){
+            this.arena.cbq.push({'ev': 'toArena'})
+        }
 
         for(var i = 1; i <= this.arena.rows; i++){
             for(var j = 1; j <= this.arena.cols; j++){
@@ -1104,6 +1107,9 @@ export default class {
                 this.all_players[id].max_bombs = 0
                 this.lobby.addPlayer(this.all_players[id])
             }
+        }
+        if(!this.client){
+            this.lobby.cbq.push({'ev': 'toLobby'})
         }
     }
 

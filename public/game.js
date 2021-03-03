@@ -43,6 +43,22 @@ game.on('teleport', (ps) => {
     }
 })
 
+// death effect
+game.on('died', (p) => {
+    for(let i = 0; i < 20; i++){
+        particles.add(p.x, p.y, randomGaussian(0, 2), randomGaussian(0, 2), 0.1, 500)
+    }
+})
+
+// room transitions
+game.on('toLobby', () => {
+    particles.clear()
+    ss_px = 0
+    ss_py = 0
+    ss_vx = 0
+    ss_vy = 0
+})
+
 // local game update
 const LOCAL_GAME_INTERVAL = 16 // ms
 function gameStep(){

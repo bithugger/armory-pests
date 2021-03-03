@@ -7,7 +7,7 @@ class Particle {
         this.size = size
         this.time = time
         this.period = period
-        this.phase = random(0, 2*PI)
+        this.phase = random(-PI, PI)
     }
 
     update(dt){
@@ -20,9 +20,10 @@ class Particle {
         push()
         let c = color(255, 255*Math.tanh(this.time/50))
         let r = this.size*Math.tanh(this.time/100)
-        let a = this.phase
+        let a = Math.abs(this.phase)
+        let s = Math.sign(this.phase)
         if(this.period > 0){
-            a += this.time*2*PI/this.period
+            a += s*this.time*2*PI/this.period
         }
         translate(this.x, this.y)
         rotate(a)
@@ -53,6 +54,10 @@ export default class {
                 this.particles.splice(i, 1)
             }
         }
+    }
+
+    clear(){
+        this.particles = []
     }
 
     draw(){
