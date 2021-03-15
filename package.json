@@ -4,7 +4,8 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "test": "npx babel-node main.js"
+    "build": "babel main.js public/armory-pests-game.mjs -d dist",
+    "start": "npm run build && node dist/main.js"
   },
   "author": "wavy",
   "license": "ISC",

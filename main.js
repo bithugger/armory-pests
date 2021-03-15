@@ -21,7 +21,7 @@ app.get('/', (req, res) => {
     res.render('game')
 })
 
-const ArmoryPests = require('./public/armory-pests-game.mjs').default
+const ArmoryPests = require('./armory-pests-game').default
 const game = new ArmoryPests()
 const GAME_INTERVAL = 25 // ms
 
