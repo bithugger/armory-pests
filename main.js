@@ -64,22 +64,9 @@ const timesyncServer = require('timesync/server');
 // handle timesync requests
 app.use('/timesync', timesyncServer.requestHandler);
 
-var expected = Date.now()
 
 function gameStep(){
-    var dt = Date.now() - expected + GAME_INTERVAL
-    var drift = dt - GAME_INTERVAL
-    if(drift > GAME_INTERVAL){
-        // TODO something?
-        // game will leap forward
-        expected = Date.now()
-    }
-
-    game.update(dt)
-
-    expected += GAME_INTERVAL
-    setTimeout(gameStep, Math.max(0, GAME_INTERVAL - drift))
+    game.update(GAME_INTERVAL)
 }
 
-expected = Date.now() + GAME_INTERVAL
-setTimeout(gameStep, GAME_INTERVAL)
+setInterval(gameStep, GAME_INTERVAL)
