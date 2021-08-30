@@ -17,6 +17,9 @@ class Avatar {
         this.reverse_time = 0
         this.poop_time = 0
         this.invis_time = 0
+
+        // modifiers
+        this.slowed = false
         
         // internal fields
         this.spd = 0
@@ -63,6 +66,9 @@ class Avatar {
         var spd = this.spd + Math.sign(spd_err)*Math.min(Math.abs(spd_err), this.max_spd/3)
         spd = Math.max(Math.min(spd, this.max_spd), 0)
         spd = Math.min(spd, 7.5)
+        if(this.slowed){
+            spd = Math.min(spd, 2.5)
+        }
         
         if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 180) 
             || (this.blocked_down && d1 == 90) || (this.blocked_up && d1 == 270)){
@@ -113,6 +119,8 @@ class Bomb {
         this.vx = 0
         this.vy = 0
 
+        this.slowed = false
+
         this.blocked_up = false
         this.blocked_down = false
         this.blocked_left = false
@@ -142,8 +150,14 @@ class Bomb {
 
         this.x += this.vx*dt/1000
         this.y += this.vy*dt/1000
-        this.vx -= this.vx*dt/1000
-        this.vy -= this.vy*dt/1000
+
+        if(this.slowed){
+            this.vx -= this.vx*dt/100
+            this.vy -= this.vy*dt/100
+        }else{
+            this.vx -= this.vx*dt/1000
+            this.vy -= this.vy*dt/1000
+        }
     }
 }
 
@@ -206,6 +220,58 @@ class Wall {
     }
 }
 
+/* no speed up */
+class Ice {
+    constructor(x, y){
+        this.x = x
+        this.y = y
+    }
+
+    update(dt){
+
+    }
+}
+
+/* no bomb kick */
+class Mud {
+    constructor(x, y){
+        this.x = x
+        this.y = y
+    }
+
+    update(dt){
+
+    }
+}
+
+/* kills players */
+class Fire {
+    constructor(x, y){
+        this.x = x
+        this.y = y
+    }
+
+    update(dt){
+
+    }
+}
+
+/* teleports players (and bombs and explosions..?) */
+class Teleporter {
+    constructor(x1, y1, x2, y2){
+        this.x1 = x1
+        this.y1 = y1
+        this.x2 = x2
+        this.y2 = y2
+        this.already_teleported = []
+        this.disabled = false
+    }
+
+    update(dt){
+
+    }
+}
+
 class RoomManager {
     constructor(rows, cols, client = false){
         this.players = []
@@ -213,6 +279,10 @@ class RoomManager {
         this.blocks = []
         this.walls = []
         this.powerups = []
+        this.ices = []
+        this.muds = []
+        this.fires = []
+        this.teleporters = []
         this.rows = rows
         this.cols = cols
         this.client = client
@@ -251,6 +321,18 @@ class RoomManager {
         })
         this.powerups.forEach((p) => {
             p.update(dt)
+        })
+        this.ices.forEach((x) => {
+            x.update(dt)
+        })
+        this.muds.forEach((x) => {
+            x.update(dt)
+        })
+        this.fires.forEach((x) => {
+            x.update(dt)
+        })
+        this.teleporters.forEach((x) => {
+            x.update(dt)
         })
         
         this.checkCollisions(dt)
@@ -466,14 +548,14 @@ class RoomManager {
                 if(Math.abs(dx) > Math.abs(dy)){
                     if(dx > 0){
                         p.blocked_right = true
-                        if(p.bomb_kick && p.direction == 0 && p.spd > 0){
+                        if(!b.slowed && p.bomb_kick && p.direction == 0 && p.spd > 0){
                             b.vx = p.spd + 3
                         }else{
                             b.vx = 0
                         }
                     }else{
                         p.blocked_left = true
-                        if(p.bomb_kick && p.direction == 180 && p.spd > 0){
+                        if(!b.slowed && p.bomb_kick && p.direction == 180 && p.spd > 0){
                             b.vx = -(p.spd + 3)
                         }else{
                             b.vx = 0
@@ -482,14 +564,14 @@ class RoomManager {
                 }else{
                     if(dy > 0){
                         p.blocked_down = true
-                        if(p.bomb_kick && p.direction == 90 && p.spd > 0){
+                        if(!b.slowed && p.bomb_kick && p.direction == 90 && p.spd > 0){
                             b.vy = p.spd + 3
                         }else{
                             b.vy = 0
                         }
                     }else{
                         p.blocked_up = true
-                        if(p.bomb_kick && p.direction == 270 && p.spd > 0){
+                        if(!b.slowed && p.bomb_kick && p.direction == 270 && p.spd > 0){
                             b.vy = -(p.spd + 3)
                         }else{
                             b.vy = 0
@@ -525,6 +607,8 @@ class RoomManager {
                     }
                     if(!this.client && Math.random()*10 < 4){
                         this.createPowerUp(this.blocks[j].x, this.blocks[j].y)
+                    }else if(!this.client && Math.random()*100 < 5){
+                        this.createFire(this.blocks[j].x, this.blocks[j].y)
                     }
                     this.blocks.splice(j, 1)
                     break;
@@ -677,6 +761,85 @@ class RoomManager {
                 this.reconcilePlayerBlockCollision(p, w)
             })
         })
+
+        // players on ice terrain
+        this.players.forEach((p) => {
+            p.slowed = false
+            this.ices.forEach((x) => {
+                if(Math.hypot(p.x - x.x, p.y - x.y) < 0.717){
+                    p.slowed = true
+                }
+            })
+        })
+
+        // bombs on mud terrain
+        this.players.forEach((p) => {
+            p.live_bombs.forEach((b) => {
+                b.slowed = false
+                this.muds.forEach((x) => {
+                    if(Math.hypot(b.x - x.x, b.y - x.y) <= 0.5){
+                        b.slowed = true
+                    }
+                })
+            })
+        })
+
+        // players on fire terrain
+        for(var j = this.players.length - 1; j >= 0; j--){
+            this.fires.forEach((x) => {
+                if(Math.hypot(this.players[j].x - x.x, this.players[j].y - x.y) < 0.5){
+                    this.players[j].live_bombs.forEach((b) => {
+                        if(b.state == 'ticking'){
+                            this.explode(b)
+                        }
+                    })
+                    this.fireEvent('died', this.players[j])
+                    this.players.splice(j, 1)
+                }
+            })
+        }
+
+        // players on teleporters
+        // only perform teleport logic server side
+        if(!this.client){
+            this.teleporters.forEach((x) => {
+                this.walls.forEach((w) => {
+                    if(Math.hypot(x.x1 - w.x, x.y1 - w.y) < 0.1 || Math.hypot(x.x2 - w.x, x.y2 - w.y) < 0.1){
+                        x.disabled = true
+                    }
+                })
+
+                this.players.forEach((p) => {
+                    let ati = x.already_teleported.indexOf(p)
+                    if(ati < 0 && !x.disabled){
+                        if(Math.hypot(p.x - x.x1, p.y - x.y1) < 0.1){
+                            let delta_x = p.x - x.x1
+                            let delta_y = p.y - x.y1
+                            p.x = x.x2 + delta_x
+                            p.y = x.y2 + delta_y
+
+                            this.fireEvent('teleport', [{x: x.x2 + delta_x, y: x.y2 + delta_y}, {x: x.x1 + delta_x, y: x.y1 + delta_y}])
+                            x.already_teleported.push(p)
+                        }else if(Math.hypot(p.x - x.x2, p.y - x.y2) < 0.1){
+                            let delta_x = p.x - x.x2
+                            let delta_y = p.y - x.y2
+                            p.x = x.x1 + delta_x
+                            p.y = x.y1 + delta_y
+
+                            this.fireEvent('teleport', [{x: x.x1 + delta_x, y: x.y1 + delta_y}, {x: x.x2 + delta_x, y: x.y2 + delta_y}])
+                            x.already_teleported.push(p)
+                        }
+                    }
+                })
+                
+                for(let i = x.already_teleported.length - 1; i >= 0; i--){
+                    let z = x.already_teleported[i]
+                    if(Math.hypot(z.x - x.x1, z.y - x.y1) > 0.717 && Math.hypot(z.x - x.x2, z.y - x.y2) > 0.717){
+                        x.already_teleported.splice(i, 1)
+                    }
+                }
+            })
+        }
         
         // clear dead explosions and explosions out of bounds
         for(var i = this.explosions.length - 1; i >= 0; i--){
@@ -707,6 +870,42 @@ class RoomManager {
         var wall = new Wall(x, y)
         this.walls.push(wall)
         return wall
+    }
+
+    createIce(x, y){
+        var ice = new Ice(x, y)
+        this.ices.push(ice)
+        return ice
+    }
+
+    createMud(x, y){
+        var mud = new Mud(x, y)
+        this.muds.push(mud)
+        return mud
+    }
+
+    createFire(x, y){
+        var fire = new Fire(x, y)
+        this.fires.push(fire)
+        return fire
+    }
+
+    createTeleporter(x1, y1, x2, y2){
+        var teleporter = new Teleporter(x1, y1, x2, y2)
+        this.teleporters.push(teleporter)
+        // remove blocks next to teleporter
+        for(var i = this.blocks.length - 1; i >= 0; i--){
+            var d = Math.hypot(this.blocks[i].x - teleporter.x1, this.blocks[i].y - teleporter.y1)
+            if(d < 2){
+                this.blocks.splice(i,1)
+            }else{
+                d = Math.hypot(this.blocks[i].x - teleporter.x2, this.blocks[i].y - teleporter.y2)
+                if(d < 2){
+                    this.blocks.splice(i,1)
+                }
+            }
+        }
+        return teleporter
     }
 
     createPowerUp(x, y, type = 'random'){
@@ -808,6 +1007,26 @@ class RoomManager {
                 e.push(w)
             }
         })
+        this.ices.forEach((x) => {
+            if(Math.hypot(x - x.x, y - x.y) < 0.5){
+                e.push(x)
+            }
+        })
+        this.muds.forEach((x) => {
+            if(Math.hypot(x - x.x, y - x.y) < 0.5){
+                e.push(x)
+            }
+        })
+        this.fires.forEach((x) => {
+            if(Math.hypot(x - x.x, y - x.y) < 0.5){
+                e.push(x)
+            }
+        })
+        this.teleporters.forEach((x) => {
+            if((Math.hypot(x - x.x1, y - x.y1) < 0.5) || (Math.hypot(x - x.x2, y - x.y2) < 0.5)){
+                e.push(x)
+            }
+        })
         return e
     }
 
@@ -824,6 +1043,14 @@ class RoomManager {
             this.explode(e)
         }else if(e instanceof Avatar){
             this.players.splice(this.players.indexOf(e), 1)
+        }else if(e instanceof Ice){
+            this.ices.splice(this.ices.indexOf(e), 1)
+        }else if(e instanceof Mud){
+            this.muds.splice(this.muds.indexOf(e), 1)
+        }else if(e instanceof Fire){
+            this.fires.splice(this.fires.indexOf(e), 1)
+        }else if(e instanceof Teleporter){
+            this.teleporters.splice(this.teleporters.indexOf(e), 1)
         }
     }
 
@@ -833,6 +1060,10 @@ class RoomManager {
         this.blocks = []
         this.walls = []
         this.powerups = []
+        this.ices = []
+        this.muds = []
+        this.fires = []
+        this. teleporters = []
         this.cbq = []
     }
 }
@@ -921,6 +1152,19 @@ export default class {
             Object.setPrototypeOf(p, Powerup.prototype)
         })
 
+        this.lobby.ices.forEach((x) => {
+            Object.setPrototypeOf(x, Ice.prototype)
+        })
+        this.lobby.muds.forEach((x) => {
+            Object.setPrototypeOf(x, Mud.prototype)
+        })
+        this.lobby.fires.forEach((x) => {
+            Object.setPrototypeOf(x, Fire.prototype)
+        })
+        this.lobby.teleporters.forEach((x) => {
+            Object.setPrototypeOf(x, Teleporter.prototype)
+        })
+
         this.arena.players.forEach((p) => {
             Object.setPrototypeOf(p, Avatar.prototype)
             p.live_bombs.forEach((b) => {
@@ -942,6 +1186,19 @@ export default class {
 
         this.arena.powerups.forEach((p) => {
             Object.setPrototypeOf(p, Powerup.prototype)
+        })
+
+        this.arena.ices.forEach((x) => {
+            Object.setPrototypeOf(x, Ice.prototype)
+        })
+        this.arena.muds.forEach((x) => {
+            Object.setPrototypeOf(x, Mud.prototype)
+        })
+        this.arena.fires.forEach((x) => {
+            Object.setPrototypeOf(x, Fire.prototype)
+        })
+        this.arena.teleporters.forEach((x) => {
+            Object.setPrototypeOf(x, Teleporter.prototype)
         })
 
         for(let i = levi; i < this.lobby.cbq.length; i++){
@@ -1044,23 +1301,63 @@ export default class {
             this.arena.cbq.push({'ev': 'toArena'})
         }
 
-        for(var i = 1; i <= this.arena.rows; i++){
-            for(var j = 1; j <= this.arena.cols; j++){
+        // generate map
+        for(let i = 1; i <= this.arena.rows; i++){
+            for(let j = 1; j <= this.arena.cols; j++){
+                // walls every 'other' block
                 if(i % 2 == 0 && j % 2 == 0){
                     this.arena.createWall(j, i)
                 }else if(!this.client){
-                    var k = Math.random()*7
-                    if(k <= 6){
+                    // randomly place some blocks
+                    let k = Math.random()*8
+                    if(k <= 7){
                         this.arena.createBlock(j, i)
                     }
                 }
             }
         }
+
+        // spawn ice
+        let Pr = 2*Math.PI/this.arena.rows
+        let Pc = 2*Math.PI/this.arena.cols
+        let ix = [Math.random(), Math.random(), Math.random()]
+        let iy = [Math.random(), Math.random(), Math.random()]
+        let ixp = [Math.random(), Math.random(), Math.random()]
+        let iyp = [Math.random(), Math.random(), Math.random()]
+        let it = Math.random()
+        for(let i = 1; i <= this.arena.rows; i++){
+            for(let j = 1; j <= this.arena.cols; j++){
+                let zy = iy[0]*Math.sin(Pr*i + iyp[0]) + iy[1]*Math.sin(2*Pr*i + iyp[1]) + iy[2]*Math.sin(3*Pr*i + iyp[2])
+                let zx = ix[0]*Math.sin(Pc*j + ixp[0]) + ix[1]*Math.sin(2*Pc*j + ixp[1]) + ix[2]*Math.sin(3*Pc*j + ixp[2])
+                if(zx*zy > it){
+                    this.arena.createIce(j, i)
+                }
+            }
+        }
+
+        // spawn mud
+        ix = [Math.random(), Math.random(), Math.random()]
+        iy = [Math.random(), Math.random(), Math.random()]
+        ixp = [Math.random(), Math.random(), Math.random()]
+        iyp = [Math.random(), Math.random(), Math.random()]
+        it = Math.random()
+        for(let i = 1; i <= this.arena.rows; i++){
+            for(let j = 1; j <= this.arena.cols; j++){
+                let zy = iy[0]*Math.sin(Pr*i + iyp[0]) + iy[1]*Math.sin(2*Pr*i + iyp[1]) + iy[2]*Math.sin(3*Pr*i + iyp[2])
+                let zx = ix[0]*Math.sin(Pc*j + ixp[0]) + ix[1]*Math.sin(2*Pc*j + ixp[1]) + ix[2]*Math.sin(3*Pc*j + ixp[2])
+                if(zx*zy > it){
+                    this.arena.createMud(j, i)
+                }
+            }
+        }
+
+        // reset arena closing variables
         this.cxmin = 1
         this.cxmax = this.arena.cols
         this.cymin = 1
         this.cymax = this.arena.rows
 
+        // decide the random closing direction
         this.cd = Math.floor(Math.random()*4)
         if(this.cd == 0 || this.client){
             this.cx = 1
@@ -1077,12 +1374,12 @@ export default class {
         }
         this.cn = 0
 
-        var spawnx = [...SPAWN_X[this.numPlayers - 1]]
-        var spawny = [...SPAWN_Y[this.numPlayers - 1]]
+        let spawnx = [...SPAWN_X[this.numPlayers - 1]]
+        let spawny = [...SPAWN_Y[this.numPlayers - 1]]
         // shuffle spawn points
-        for(var i = spawnx.length - 1; i > 0; i--){
-            var j = Math.floor(Math.random() * (i + 1))
-            var a = spawnx[j]
+        for(let i = spawnx.length - 1; i > 0; i--){
+            let j = Math.floor(Math.random() * (i + 1))
+            let a = spawnx[j]
             spawnx[j] = spawnx[i]
             spawnx[i] = a
             a = spawny[j]
@@ -1090,19 +1387,34 @@ export default class {
             spawny[i] = a
         }
 
-        for(var id in this.all_players){
-            var c = this.all_players[id].color
+        // spawn players
+        for(let id in this.all_players){
+            let c = this.all_players[id].color
 
             this.all_players[id] = new Avatar(spawnx.pop(), spawny.pop(), c)
             this.arena.addPlayer(this.all_players[id])
+        }
+
+        // randomly pick up to 6 blocks and replace them with teleporters
+        let num_teleporters = Math.round(Math.random()*3)
+        for(let i = 0; i < num_teleporters; i++){
+            let ib1 = Math.floor(Math.random()*this.arena.blocks.length)
+            let x1 = this.arena.blocks[ib1].x
+            let y1 = this.arena.blocks[ib1].y
+            this.arena.blocks.splice(ib1, 1)
+            let ib2 = Math.floor(Math.random()*this.arena.blocks.length)
+            let x2 = this.arena.blocks[ib2].x
+            let y2 = this.arena.blocks[ib2].y
+            this.arena.blocks.splice(ib2, 1)
+            this.arena.createTeleporter(x1, y1, x2, y2)
         }
     }
     
     endGame(){
         // move all players into the lobby
-        for(var id in this.all_players){
+        for(let id in this.all_players){
             if(this.lobby.players.indexOf(this.all_players[id]) < 0){
-                var c = this.all_players[id].color
+                let c = this.all_players[id].color
                 this.all_players[id] = new Avatar(Math.floor(Math.random()*(this.lobby.cols - 7)) + 4, Math.floor(Math.random()*(this.lobby.rows - 5)) + 4, c)
                 this.all_players[id].max_bombs = 0
                 this.lobby.addPlayer(this.all_players[id])

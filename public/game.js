@@ -319,6 +319,81 @@ function drawWall(w) {
     pop()
 }
 
+function drawIce(x) {
+    push()
+    stroke(110)
+    translate(x.x, x.y)
+    for(let i = -3/8; i < 1/2; i += 1/4){
+        line(i, -1/2, -1/2, i)
+        line(i, 1/2, 1/2, i)
+
+        line(-1/2, i, -i, 1/2)
+        line(1/2, i, -i, -1/2)
+    }
+    pop()
+}
+
+function drawMud(x) {
+    push()
+    noStroke()
+    fill(50)
+    translate(x.x, x.y)
+    for(let i = -3/8; i < 1/2; i += 1/4){
+        for(let j = -3/8; j < 1/2; j += 1/4){
+            circle(j, i, 1/20)
+        }
+    }
+    pop()
+}
+
+function drawFire(x) {
+    push()
+    rectMode(CENTER)
+    let r = (Math.cos(frameCount/30)+1)*20 + 200
+    let g = (Math.cos(frameCount/30)+1)*20 + 40
+    let b = (Math.cos(frameCount/30)+1)*10 + 20
+    fill(color(r, g, b))
+    translate(x.x, x.y)
+    rect(0, 0, 9/10)
+    pop()
+}
+
+function drawTeleporter(x) {
+    push()
+    rectMode(CENTER)
+    if(x.disabled){
+        fill(100)
+    }else{
+        let r = (Math.cos(frameCount/30)+1)*15 + 150
+        let g = (Math.cos(frameCount/30)+1)*15 + 40
+        let b = (Math.cos(frameCount/30)+1)*15 + 200
+        fill(color(r, g, b))
+    }
+    translate(x.x1, x.y1)
+    rect(0, 0, 7/8)
+    fill(150)
+    noStroke()
+    rect(0, 0, 3/8)
+    pop()
+
+    push()
+    rectMode(CENTER)
+    if(x.disabled){
+        fill(100)
+    }else{
+        let r = (Math.cos(frameCount/30)+1)*15 + 150
+        let g = (Math.cos(frameCount/30)+1)*15 + 40
+        let b = (Math.cos(frameCount/30)+1)*15 + 200
+        fill(color(r, g, b))
+    }
+    translate(x.x2, x.y2)
+    rect(0, 0, 7/8)
+    fill(150)
+    noStroke()
+    rect(0, 0, 3/8)
+    pop()
+}
+
 function drawObjects(m){
     push()
     stroke(60)
@@ -328,6 +403,18 @@ function drawObjects(m){
     // screen shake effect
     translate(ss_px, ss_py)
 
+    m.ices.forEach((x) => {
+        drawIce(x)
+    })
+    m.muds.forEach((x) => {
+        drawMud(x)
+    })
+    m.teleporters.forEach((x) => {
+        drawTeleporter(x)
+    })
+    m.fires.forEach((x) => {
+        drawFire(x)
+    })
     m.blocks.forEach((b) => {
         drawBlock(b)
     })
@@ -394,7 +481,7 @@ function drawScores(m){
 }
 
 function drawLobby(){
-    background(color(0))
+    background(0)
 
     push()
     stroke(120)
@@ -426,7 +513,7 @@ function drawLobby(){
 }
 
 function drawPlaying(){
-    background(color(150))
+    background(150)
     
     push()
     scale(SQUARE_SIZE)
