@@ -152,8 +152,8 @@ class Bomb {
         this.y += this.vy*dt/1000
 
         if(this.slowed){
-            this.vx -= this.vx*dt/100
-            this.vy -= this.vy*dt/100
+            this.vx -= this.vx*dt/50
+            this.vy -= this.vy*dt/50
         }else{
             this.vx -= this.vx*dt/1000
             this.vy -= this.vy*dt/1000
@@ -812,7 +812,7 @@ class RoomManager {
                 this.players.forEach((p) => {
                     let ati = x.already_teleported.indexOf(p)
                     if(ati < 0 && !x.disabled){
-                        if(Math.hypot(p.x - x.x1, p.y - x.y1) < 0.1){
+                        if(Math.hypot(p.x - x.x1, p.y - x.y1) < 0.2){
                             let delta_x = p.x - x.x1
                             let delta_y = p.y - x.y1
                             p.x = x.x2 + delta_x
@@ -820,7 +820,7 @@ class RoomManager {
 
                             this.fireEvent('teleport', [{x: x.x2 + delta_x, y: x.y2 + delta_y}, {x: x.x1 + delta_x, y: x.y1 + delta_y}])
                             x.already_teleported.push(p)
-                        }else if(Math.hypot(p.x - x.x2, p.y - x.y2) < 0.1){
+                        }else if(Math.hypot(p.x - x.x2, p.y - x.y2) < 0.2){
                             let delta_x = p.x - x.x2
                             let delta_y = p.y - x.y2
                             p.x = x.x1 + delta_x
@@ -1318,8 +1318,8 @@ export default class {
         }
 
         // spawn ice
-        let Pr = 2*Math.PI/this.arena.rows
-        let Pc = 2*Math.PI/this.arena.cols
+        let Pr = Math.PI/this.arena.rows
+        let Pc = Math.PI/this.arena.cols
         let ix = [Math.random(), Math.random(), Math.random()]
         let iy = [Math.random(), Math.random(), Math.random()]
         let ixp = [Math.random(), Math.random(), Math.random()]

@@ -23,7 +23,7 @@ app.get('/', (req, res) => {
 
 const ArmoryPests = require('./armory-pests-game').default
 const game = new ArmoryPests()
-const GAME_INTERVAL = 25 // ms
+const GAME_INTERVAL = 20 // ms
 
 // require websocket connection
 io.on('connection', socket => {

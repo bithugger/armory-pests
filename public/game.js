@@ -60,7 +60,7 @@ game.on('toLobby', () => {
 })
 
 // local game update
-const LOCAL_GAME_INTERVAL = 16 // ms
+const LOCAL_GAME_INTERVAL = 20 // ms
 function gameStep(){
     game.update(LOCAL_GAME_INTERVAL)
     particles.update(LOCAL_GAME_INTERVAL)
