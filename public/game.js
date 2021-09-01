@@ -3,8 +3,8 @@ import ParticleSystem from './particles.mjs'
 const game = new Game(true)
 const particles = new ParticleSystem()
 
-var SQUARE_SIZE = Math.min(window.innerWidth/(game.arena.cols + 2), window.innerHeight/(game.arena.rows + 2))
-var SCREEN_WIDTH = (game.arena.cols + 1)*SQUARE_SIZE
+var SQUARE_SIZE = Math.min(window.innerWidth/(game.arena.cols + 2 + 6), window.innerHeight/(game.arena.rows + 2))
+var SCREEN_WIDTH = (game.arena.cols + 1 + 6)*SQUARE_SIZE
 var SCREEN_HEIGHT = (game.arena.rows + 1)*SQUARE_SIZE
 var showIntro = true
 var gameReady = false
@@ -21,11 +21,11 @@ const SS_KY = 1/3
 game.on('explode', (b) => {
     let d = random(0, 360)*2*PI/360
     if(b.power){
-        ss_vx = cos(d)*b.len/10
-        ss_vy = sin(d)*b.len/8
+        ss_vx = cos(d)*b.len/15
+        ss_vy = sin(d)*b.len/12
     }else{
-        ss_vx = cos(d)*b.len/50
-        ss_vy = sin(d)*b.len/40
+        ss_vx = cos(d)*b.len/55
+        ss_vy = sin(d)*b.len/44
     }
 })
 
@@ -162,8 +162,8 @@ window.preload = function () {
 }
 
 window.windowResized = function () {
-    SQUARE_SIZE = Math.min(window.innerWidth/(game.arena.cols + 2), window.innerHeight/(game.arena.rows + 2))
-    SCREEN_WIDTH = (game.arena.cols + 1)*SQUARE_SIZE
+    SQUARE_SIZE = Math.min(window.innerWidth/(game.arena.cols + 2 + 6), window.innerHeight/(game.arena.rows + 2))
+    SCREEN_WIDTH = (game.arena.cols + 1 + 6)*SQUARE_SIZE
     SCREEN_HEIGHT = (game.arena.rows + 1)*SQUARE_SIZE
     resizeCanvas(SCREEN_WIDTH, SCREEN_HEIGHT)
 }
@@ -349,9 +349,9 @@ function drawMud(x) {
 function drawFire(x) {
     push()
     rectMode(CENTER)
-    let r = (Math.cos(frameCount/30)+1)*20 + 200
-    let g = (Math.cos(frameCount/30)+1)*20 + 40
-    let b = (Math.cos(frameCount/30)+1)*10 + 20
+    let r = (Math.cos(frameCount/23)+1)*20 + 200
+    let g = (Math.cos(frameCount/23)+1)*20 + 40
+    let b = (Math.cos(frameCount/23)+1)*10 + 20
     fill(color(r, g, b))
     translate(x.x, x.y)
     rect(0, 0, 9/10)
@@ -364,9 +364,9 @@ function drawTeleporter(x) {
     if(x.disabled){
         fill(100)
     }else{
-        let r = (Math.cos(frameCount/30)+1)*15 + 150
-        let g = (Math.cos(frameCount/30)+1)*15 + 40
-        let b = (Math.cos(frameCount/30)+1)*15 + 200
+        let r = (Math.cos(frameCount/30)+1)*20 + 150
+        let g = (Math.cos(frameCount/30)+1)*20 + 40
+        let b = (Math.cos(frameCount/30)+1)*20 + 200
         fill(color(r, g, b))
     }
     translate(x.x1, x.y1)
@@ -381,9 +381,9 @@ function drawTeleporter(x) {
     if(x.disabled){
         fill(100)
     }else{
-        let r = (Math.cos(frameCount/30)+1)*15 + 150
-        let g = (Math.cos(frameCount/30)+1)*15 + 40
-        let b = (Math.cos(frameCount/30)+1)*15 + 200
+        let r = (Math.cos(frameCount/30)+1)*20 + 150
+        let g = (Math.cos(frameCount/30)+1)*20 + 40
+        let b = (Math.cos(frameCount/30)+1)*20 + 200
         fill(color(r, g, b))
     }
     translate(x.x2, x.y2)
@@ -437,11 +437,65 @@ function drawObjects(m){
     pop()
 }
 
+function drawLobbyInfo(m){
+    push()
+    stroke(60)
+    strokeWeight(1/30)
+    scale(SQUARE_SIZE)
+
+    // screen shake effect
+    translate(ss_px, ss_py)
+
+    fill(200)
+    textSize(1/3)
+    drawPowerUp({x: m.cols + 2, y: 1, label: 'B+'})
+    text('Bombs Up', m.cols + 3, 1.1)
+
+    drawPowerUp({x: m.cols + 2, y: 2, label: 'R+'})
+    text('Range Up', m.cols + 3, 2.1)
+
+    drawPowerUp({x: m.cols + 2, y: 3, label: 'S+'})
+    text('Speed Up', m.cols + 3, 3.1)
+
+    drawPowerUp({x: m.cols + 2, y: 4, label: 'K'})
+    text('Bomb Kick', m.cols + 3, 4.1)
+
+    drawPowerUp({x: m.cols + 2, y: 5, label: 'P'})
+    text('Piercing', m.cols + 3, 5.1)
+
+    drawPowerUp({x: m.cols + 2, y: 6, label: '8'})
+    text('8 Way', m.cols + 3, 6.1)
+
+    drawPowerUp({x: m.cols + 2, y: 7, label: ' '})
+    text('Invisible', m.cols + 3, 7.1)
+
+    drawPowerUp({x: m.cols + 2, y: 8, label: 'SH'})
+    text('Shield', m.cols + 3, 8.1)
+
+    drawPowerUp({x: m.cols + 2, y: 9, label: 'TP'})
+    text('Teleport', m.cols + 3, 9.1)
+
+    drawPowerUp({x: m.cols + 2, y: 10, label: '?'})
+    text('Random', m.cols + 3, 10.1)
+
+    drawPowerUp({x: m.cols + 2, y: 11, label: '!'})
+    text('Curse', m.cols + 3, 11.1)
+
+    drawFire({x: m.cols + 2, y: 12})
+    text('Death', m.cols + 3, 12.1)
+
+    drawTeleporter({x1: m.cols + 2, y1: 13, x2: m.cols + 2, y2: 13, disabled: false})
+    text('Warp', m.cols + 3, 13.1)
+
+    pop()
+}
+
 function drawIntro(){
     background(0)
 
     stroke(200)
     scale(SQUARE_SIZE)
+    translate(3, 0)
     strokeWeight(1/20)
     textSize(1)
     text('Armory Pests', (game.arena.cols*2/7), (game.arena.rows/2))
@@ -507,17 +561,21 @@ function drawLobby(){
     text('Bomb with space', 6.5, 9.5)
     pop()
 
+    drawLobbyInfo(game.lobby)
+
     drawObjects(game.lobby)
 
     drawScores(game.lobby)
 }
 
 function drawPlaying(){
-    background(150)
-    
+    background(0)
+    translate(3*SQUARE_SIZE, 0)
+
     push()
     scale(SQUARE_SIZE)
-    
+    fill(150)
+    rect(0, 0, game.arena.cols + 1, game.arena.rows + 1)
     stroke(120)
     strokeWeight(1/30)
     for(let i = 0; i <= game.arena.rows; i++){
@@ -537,7 +595,7 @@ function drawPlaying(){
         strokeWeight(1/20)
         textSize(1)
         rectMode(CENTER)
-        fill(250)
+        fill(color(250, 200))
         rect(game.arena.cols/2 + 1, game.arena.rows/2, game.arena.cols + 2, 3)
         fill(0)
         text('GAME SET', (game.arena.cols*3/8), game.arena.rows/2 + 1/4)

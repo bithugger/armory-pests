@@ -385,9 +385,9 @@ class RoomManager {
                 this.players[opi].y = power.y
                 this.fireEvent('teleport', [player, this.players[opi]])
             }
-        }else if(power.type == 'PB'){
+        }else if(power.type == 'P'){
             player.bomb_power = true
-        }else if(power.type == '8B'){
+        }else if(power.type == '8'){
             player.bomb_split = 8
         }else if(power.type == 'SH'){
             player.shield_time += 10000
@@ -592,7 +592,7 @@ class RoomManager {
                 var d = Math.hypot(this.walls[j].x - this.explosions[i].x, this.walls[j].y - this.explosions[i].y)
                 if(d < 0.5){
                     this.explosions.splice(i, 1)
-                    break;
+                    break
                 }
             }
         }
@@ -611,7 +611,7 @@ class RoomManager {
                         this.createFire(this.blocks[j].x, this.blocks[j].y)
                     }
                     this.blocks.splice(j, 1)
-                    break;
+                    break
                 }
             }
         }
@@ -785,8 +785,8 @@ class RoomManager {
         })
 
         // players on fire terrain
-        for(var j = this.players.length - 1; j >= 0; j--){
-            this.fires.forEach((x) => {
+        this.fires.forEach((x) => {
+            for(var j = this.players.length - 1; j >= 0; j--){
                 if(Math.hypot(this.players[j].x - x.x, this.players[j].y - x.y) < 0.5){
                     this.players[j].live_bombs.forEach((b) => {
                         if(b.state == 'ticking'){
@@ -796,8 +796,8 @@ class RoomManager {
                     this.fireEvent('died', this.players[j])
                     this.players.splice(j, 1)
                 }
-            })
-        }
+            }
+        })
 
         // players on teleporters
         // only perform teleport logic server side
@@ -925,11 +925,11 @@ class RoomManager {
                 type = 'K'
                 label = 'K'
             }else if(r >= 20 && r < 22){
-                type = 'PB'
-                label = 'PB'
+                type = 'P'
+                label = 'P'
             }else if(r >= 22 && r < 24){
-                type = '8B'
-                label = '8B'
+                type = '8'
+                label = '8'
             }else if(r >= 24 && r < 27){
                 type = 'SH'
                 label = 'SH'
