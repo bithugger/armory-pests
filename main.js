@@ -34,6 +34,8 @@ io.on('connection', socket => {
     })
     
     socket.on('input', (data) => {
+        socket.volatile.broadcast.emit('input', data)
+
         setTimeout(() => {
             game.handleInput(socket.id, data)
         }, data.t - Date.now())
@@ -45,8 +47,8 @@ io.on('connection', socket => {
     })
 
     setInterval(() => {
-        io.volatile.emit('sync', game)
-    }, GAME_INTERVAL)
+        io.volatile.emit('sync', JSON.stringify(game))
+    }, 3*GAME_INTERVAL)
 })
 
 // app.use (function (req, res, next) {

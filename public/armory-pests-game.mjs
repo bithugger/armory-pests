@@ -1397,7 +1397,7 @@ export default class {
 
         // randomly pick up to 6 blocks and replace them with teleporters
         let num_teleporters = Math.round(Math.random()*3)
-        for(let i = 0; i < num_teleporters; i++){
+        for(let i = 0; i < num_teleporters && this.arena.blocks.length > 2; i++){
             let ib1 = Math.floor(Math.random()*this.arena.blocks.length)
             let x1 = this.arena.blocks[ib1].x
             let y1 = this.arena.blocks[ib1].y

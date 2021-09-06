@@ -87,9 +87,15 @@ socket.on("connect", () => {
     gameReady = true
 
     socket.on('sync', (data) => {
-        game.sync(data)
+        game.sync(JSON.parse(data))
     })
     
+    socket.on('input', (data) => {
+        setTimeout(() => {
+            game.handleInput(socket.id, data)
+        }, data.t - ts.now())
+    })
+
     window.keyPressed = function () {
         if(showIntro){
             if(keyCode === 32){
