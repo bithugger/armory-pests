@@ -3,6 +3,7 @@ const app = express()
 const fs = require('fs')
 // const https = require('https')
 const http = require('http')
+const { PeerServer } = require('peer')
 
 // certificates
 // const server = https.createServer({
@@ -31,14 +32,15 @@ io.on('connection', socket => {
     
     socket.on('join', () => {
         game.addPlayer(socket.id)
+        socket.broadcast.emit('join', socket.id)
         io.volatile.emit('sync', game.serialize())
     })
     
     socket.on('input', (data) => {
-        socket.volatile.broadcast.emit('input', data)
+        // socket.volatile.broadcast.emit('input', data)
 
         setTimeout(() => {
-            game.handleInput(data.player, data)
+            game.handleInput(socket.id, data)
         }, data.t - Date.now())
     })
     
@@ -70,6 +72,12 @@ io.on('connection', socket => {
 // });
 
 server.listen(8888)
+
+
+const peerServer = PeerServer({
+    port: 8889
+})
+
 
 function gameStep(){
     game.update(1)

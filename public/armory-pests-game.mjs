@@ -1815,6 +1815,7 @@ export default class {
                 this.arena.players.splice(aai, 1)
             }
             this.color_choices.unshift(c)
+            this.all_players[id] = undefined
             delete this.all_players[id]
         }
         delete this.scores[id]

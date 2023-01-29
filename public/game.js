@@ -78,19 +78,104 @@ function gameStep(){
 const INPUT_DELAY = 40 // ms
 
 // websocket required
-const socket = io('/')
+const socket = io('/', {
+    // disable auto-reconnect. we need more specific logic for reconnecting clients
+    reconnection: false,
+    // only use websockets, no http long polling
+    transports: ['websocket']
+})
+
+const peer_connections = []
 
 socket.on("connect", () => {
-    gameReady = true
+    // create peer with given ID
+    const peer = new Peer(socket.id, {
+        host: '/',
+        port: 8889,
+        config: {
+            iceServers: [
+                {
+                urls: "stun:global.stun.twilio.com:3478?transport=udp"
+                },
+                {
+                urls: "stun:stun1.l.google.com:19302"
+                },
+                {
+                urls: "stun:openrelay.metered.ca:80",
+                },
+                {
+                urls: "turn:openrelay.metered.ca:80",
+                username: "openrelayproject",
+                credential: "openrelayproject",
+                },
+                {
+                urls: "turn:openrelay.metered.ca:443",
+                username: "openrelayproject",
+                credential: "openrelayproject",
+                },
+                {
+                urls: "turn:openrelay.metered.ca:443?transport=tcp",
+                username: "openrelayproject",
+                credential: "openrelayproject",
+                },
+            ]
+        }
+    })
+
+    // connected to peer server
+    peer.on('open', id => {
+        gameReady = true
+    })
+
+    // incoming connections
+    peer.on('connection', connection => {
+        connection.on('open', () => {
+            peer_connections[connection.peer] = connection
+        })
+
+        connection.on('error', (err) => {
+            // TODO
+        })
+
+        connection.on('data', data => {
+            handlePeerData(connection.peer, data)
+        })
+    })
+
+    function broadcast(data){
+        for(const id in peer_connections){
+            peer_connections[id].send(data)
+        }
+    }
+
+    function handlePeerData(id, data){
+        setTimeout(() => {
+            game.handleInput(id, data)
+        }, data.t - ts.now)
+    }
+
+    socket.on('join', id => {
+        // new user joined, connect to them directly
+        const connection = peer.connect(id, {
+            serialization: 'binary',
+            reliable: false
+        })
+
+        connection.on('open', () => {
+            peer_connections[connection.peer] = connection
+        })
+
+        connection.on('error', (err) => {
+            // TODO
+        })
+
+        connection.on('data', data => {
+            handlePeerData(connection.peer, data)
+        })
+    })
 
     socket.on('sync', (data) => {
         game.deserialize(data)
-    })
-    
-    socket.on('input', (data) => {
-        setTimeout(() => {
-            game.handleInput(data.player, data)
-        }, data.t - ts.now)
     })
 
     socket.on('event', (e) => {
@@ -99,34 +184,39 @@ socket.on("connect", () => {
 
     window.keyPressed = function () {
         if(showIntro){
-            if(keyCode === 32){
+            if(gameReady && keyCode === 32){
                 showIntro = false
                 socket.emit('join')
                 setInterval(gameStep, LOCAL_GAME_INTERVAL)
             }
         }else{
             if(keyCode === LEFT_ARROW){
-                socket.emit('input', {press: true, x: 2, t: ts.now + INPUT_DELAY, player: socket.id})
+                broadcast({ press: true, x: 2, t: ts.now + INPUT_DELAY })
+                socket.emit('input', { press: true, x: 2, t: ts.now + INPUT_DELAY })
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 2})
                 }, INPUT_DELAY)
             }else if(keyCode === RIGHT_ARROW){
-                socket.emit('input', {press: true, x: 0, t: ts.now + INPUT_DELAY, player: socket.id})
+                broadcast({ press: true, x: 0, t: ts.now + INPUT_DELAY })
+                socket.emit('input', { press: true, x: 0, t: ts.now + INPUT_DELAY })
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 0})
                 }, INPUT_DELAY)
             }else if(keyCode === UP_ARROW){
-                socket.emit('input', {press: true, x: 3, t: ts.now + INPUT_DELAY, player: socket.id})
+                broadcast({ press: true, x: 3, t: ts.now + INPUT_DELAY })
+                socket.emit('input', { press: true, x: 3, t: ts.now + INPUT_DELAY })
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 3})
                 }, INPUT_DELAY)
             }else if(keyCode === DOWN_ARROW){
-                socket.emit('input', {press: true, x: 1, t: ts.now + INPUT_DELAY, player: socket.id})
+                broadcast({ press: true, x: 1, t: ts.now + INPUT_DELAY })
+                socket.emit('input', { press: true, x: 1, t: ts.now + INPUT_DELAY })
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 1})
                 }, INPUT_DELAY)
             }else if(keyCode === 32){ // space
-                socket.emit('input', {press: true, x: 4, t: ts.now + INPUT_DELAY, player: socket.id})
+                broadcast({ press: true, x: 4, t: ts.now + INPUT_DELAY })
+                socket.emit('input', { press: true, x: 4, t: ts.now + INPUT_DELAY })
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 4})
                 }, INPUT_DELAY)
@@ -136,27 +226,32 @@ socket.on("connect", () => {
     
     window.keyReleased = function () {
         if(keyCode === LEFT_ARROW){
-            socket.emit('input', {press: false, x: 2, t: ts.now + INPUT_DELAY, player: socket.id})
+            broadcast({ press: false, x: 2, t: ts.now + INPUT_DELAY })
+            socket.emit('input', { press: false, x: 2, t: ts.now + INPUT_DELAY })
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 2})
             }, INPUT_DELAY)
         }else if(keyCode === RIGHT_ARROW){
-            socket.emit('input', {press: false, x: 0, t: ts.now + INPUT_DELAY, player: socket.id})
+            broadcast({ press: false, x: 0, t: ts.now + INPUT_DELAY })
+            socket.emit('input', {press: false, x: 0, t: ts.now + INPUT_DELAY })
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 0})
             }, INPUT_DELAY)
         }else if(keyCode === UP_ARROW){
-            socket.emit('input', {press: false, x: 3, t: ts.now + INPUT_DELAY, player: socket.id})
+            broadcast({ press: false, x: 3, t: ts.now + INPUT_DELAY })
+            socket.emit('input', {press: false, x: 3, t: ts.now + INPUT_DELAY })
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 3})
             }, INPUT_DELAY)
         }else if(keyCode === DOWN_ARROW){
-            socket.emit('input', {press: false, x: 1, t: ts.now + INPUT_DELAY, player: socket.id})
+            broadcast({ press: false, x: 1, t: ts.now + INPUT_DELAY })
+            socket.emit('input', {press: false, x: 1, t: ts.now + INPUT_DELAY })
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 1})
             }, INPUT_DELAY )
         }else if(keyCode === 32){ // space
-            socket.emit('input', {press: false, x: 4, t: ts.now + INPUT_DELAY, player: socket.id})
+            broadcast({ press: false, x: 4, t: ts.now + INPUT_DELAY })
+            socket.emit('input', {press: false, x: 4, t: ts.now + INPUT_DELAY })
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 4})
             }, INPUT_DELAY)
@@ -174,6 +269,10 @@ socket.on("connect", () => {
             ts.ping()
             socket.emit('ping')
         }, ts.interval)
+    })
+
+    socket.io.on('close', () => {
+        peer.disconnect()
     })
 })
 
@@ -274,7 +373,7 @@ function drawBomb(b){
             circle(0,0, 1/9)
         }
     }else if(b.state == 1){
-        let r = 0.25 - 0.25*Math.cos(b.time*2*Math.PI/10)
+        let r = 0.25 - 0.25*Math.cos(b.time*Math.PI/24)
         beginShape()
         for(let i = 0; i < b.num; i++){
             vertex(r*cos(i*2*PI/b.num), r*sin(i*2*PI/b.num))
@@ -297,7 +396,7 @@ function drawExplosion(e){
     translate(e.x, e.y)
 
     rotate(e.dir*Math.PI/4)
-    let size = Math.tanh(e.len)
+    let size = Math.tanh(e.len)*3/4
     scale(size)
     quad(2/5, 0, 1/10, 1/2, -(2/5+tail_len), 0, 1/10, -1/2)
     pop()
