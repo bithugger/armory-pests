@@ -31,24 +31,34 @@ io.on('connection', socket => {
     
     socket.on('join', () => {
         game.addPlayer(socket.id)
+        io.volatile.emit('sync', game.serialize())
     })
     
     socket.on('input', (data) => {
         socket.volatile.broadcast.emit('input', data)
 
         setTimeout(() => {
-            game.handleInput(socket.id, data)
+            game.handleInput(data.player, data)
         }, data.t - Date.now())
     })
     
     socket.on('disconnect', () => {
         console.log(socket.id + ' disconnected')
         game.removePlayer(socket.id)
+        io.volatile.emit('sync', game.serialize())
+    })
+
+    socket.on('ping', () => {
+        socket.emit('pong', Date.now())
     })
 
     setInterval(() => {
-        io.volatile.emit('sync', JSON.stringify(game))
-    }, 3*GAME_INTERVAL)
+        io.volatile.emit('sync', game.serialize())
+    }, 4*GAME_INTERVAL)
+
+    game.addEventDispatcher((e) => {
+        io.emit('event', e)
+    })
 })
 
 // app.use (function (req, res, next) {
@@ -59,16 +69,10 @@ io.on('connection', socket => {
     // next();
 // });
 
-server.listen(7000)
-
-const timesyncServer = require('timesync/server');
-
-// handle timesync requests
-app.use('/timesync', timesyncServer.requestHandler);
-
+server.listen(8888)
 
 function gameStep(){
-    game.update(GAME_INTERVAL)
+    game.update(1)
 }
 
 setInterval(gameStep, GAME_INTERVAL)

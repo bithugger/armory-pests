@@ -1,8 +1,11 @@
 import Game from './armory-pests-game.mjs'
 import ParticleSystem from './particles.mjs'
+import { ts } from './sync.js'
 const game = new Game(true)
 const particles = new ParticleSystem()
 
+const COLORS = ['GhostWhite', 'Gold', 'Green', 'FireBrick', 'MidnightBlue', 'DeepPink', 'Chartreuse', 'CornflowerBlue', 'OldLace', 'Purple']
+const POWERUP_LABELS = ['!', 'B+', 'S+', 'R+', 'TP', 'P', '+X', 'SH', 'K', '-1', '0', '*', ' ', '?']
 var SQUARE_SIZE = Math.min(window.innerWidth/(game.arena.cols + 2 + 6), window.innerHeight/(game.arena.rows + 2))
 var SCREEN_WIDTH = (game.arena.cols + 1 + 6)*SQUARE_SIZE
 var SCREEN_HEIGHT = (game.arena.rows + 1)*SQUARE_SIZE
@@ -16,8 +19,8 @@ var ss_py = 0
 var ss_vy = 0
 const SS_BX = 1/9
 const SS_BY = 1/7
-const SS_KX = 1/3
-const SS_KY = 1/3
+const SS_KX = 1/2
+const SS_KY = 1/2
 game.on('explode', (b) => {
     let d = random(0, 360)*2*PI/360
     if(b.power){
@@ -39,14 +42,14 @@ game.on('teleport', (ps) => {
         let x2 = p2.x + s*(p1.x - p2.x)
         let y2 = p2.y + s*(p1.y - p2.y)
 
-        particles.add(x2, y2, randomGaussian(0, 0.1), randomGaussian(0, 0.1), 0.4, s*500)
+        particles.add(x2, y2, randomGaussian(0, 0.1), randomGaussian(0, 0.1), 0.4, s*25)
     }
 })
 
 // death effect
 game.on('died', (p) => {
     for(let i = 0; i < 20; i++){
-        particles.add(p.x, p.y, randomGaussian(0, 2), randomGaussian(0, 2), 0.1, 500)
+        particles.add(p.x, p.y, randomGaussian(0, 2), randomGaussian(0, 2), 0.1, 25)
     }
 })
 
@@ -62,8 +65,8 @@ game.on('toLobby', () => {
 // local game update
 const LOCAL_GAME_INTERVAL = 20 // ms
 function gameStep(){
-    game.update(LOCAL_GAME_INTERVAL)
-    particles.update(LOCAL_GAME_INTERVAL)
+    game.update(1)
+    particles.update(1)
 
     ss_px += ss_vx
     ss_py += ss_vy
@@ -74,12 +77,6 @@ function gameStep(){
 // input delay target
 const INPUT_DELAY = 40 // ms
 
-// create a timesync instance
-var ts = timesync.create({
-    server: '/timesync',
-    interval: 5000
-});
-
 // websocket required
 const socket = io('/')
 
@@ -87,13 +84,17 @@ socket.on("connect", () => {
     gameReady = true
 
     socket.on('sync', (data) => {
-        game.sync(JSON.parse(data))
+        game.deserialize(data)
     })
     
     socket.on('input', (data) => {
         setTimeout(() => {
-            game.handleInput(socket.id, data)
-        }, data.t - ts.now())
+            game.handleInput(data.player, data)
+        }, data.t - ts.now)
+    })
+
+    socket.on('event', (e) => {
+        game.trigger(e.ev, e.args)
     })
 
     window.keyPressed = function () {
@@ -105,62 +106,75 @@ socket.on("connect", () => {
             }
         }else{
             if(keyCode === LEFT_ARROW){
-                socket.emit('input', {press: true, x: 2, t: ts.now() + INPUT_DELAY})
+                socket.emit('input', {press: true, x: 2, t: ts.now + INPUT_DELAY, player: socket.id})
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 2})
-                }, INPUT_DELAY - ts.offset)
+                }, INPUT_DELAY)
             }else if(keyCode === RIGHT_ARROW){
-                socket.emit('input', {press: true, x: 0, t: ts.now() + INPUT_DELAY})
+                socket.emit('input', {press: true, x: 0, t: ts.now + INPUT_DELAY, player: socket.id})
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 0})
-                }, INPUT_DELAY - ts.offset)
+                }, INPUT_DELAY)
             }else if(keyCode === UP_ARROW){
-                socket.emit('input', {press: true, x: 3, t: ts.now() + INPUT_DELAY})
+                socket.emit('input', {press: true, x: 3, t: ts.now + INPUT_DELAY, player: socket.id})
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 3})
-                }, INPUT_DELAY - ts.offset)
+                }, INPUT_DELAY)
             }else if(keyCode === DOWN_ARROW){
-                socket.emit('input', {press: true, x: 1, t: ts.now() + INPUT_DELAY})
+                socket.emit('input', {press: true, x: 1, t: ts.now + INPUT_DELAY, player: socket.id})
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 1})
-                }, INPUT_DELAY - ts.offset)
+                }, INPUT_DELAY)
             }else if(keyCode === 32){ // space
-                socket.emit('input', {press: true, x: 4, t: ts.now() + INPUT_DELAY})
+                socket.emit('input', {press: true, x: 4, t: ts.now + INPUT_DELAY, player: socket.id})
                 setTimeout(() => {
                     game.handleInput(socket.id, {press: true, x: 4})
-                }, INPUT_DELAY - ts.offset)
+                }, INPUT_DELAY)
             }
         }
     }
     
     window.keyReleased = function () {
         if(keyCode === LEFT_ARROW){
-            socket.emit('input', {press: false, x: 2, t: ts.now() + INPUT_DELAY})
+            socket.emit('input', {press: false, x: 2, t: ts.now + INPUT_DELAY, player: socket.id})
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 2})
-            }, INPUT_DELAY - ts.offset)
+            }, INPUT_DELAY)
         }else if(keyCode === RIGHT_ARROW){
-            socket.emit('input', {press: false, x: 0, t: ts.now() + INPUT_DELAY})
+            socket.emit('input', {press: false, x: 0, t: ts.now + INPUT_DELAY, player: socket.id})
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 0})
-            }, INPUT_DELAY - ts.offset)
+            }, INPUT_DELAY)
         }else if(keyCode === UP_ARROW){
-            socket.emit('input', {press: false, x: 3, t: ts.now() + INPUT_DELAY})
+            socket.emit('input', {press: false, x: 3, t: ts.now + INPUT_DELAY, player: socket.id})
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 3})
-            }, INPUT_DELAY - ts.offset)
+            }, INPUT_DELAY)
         }else if(keyCode === DOWN_ARROW){
-            socket.emit('input', {press: false, x: 1, t: ts.now() + INPUT_DELAY})
+            socket.emit('input', {press: false, x: 1, t: ts.now + INPUT_DELAY, player: socket.id})
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 1})
-            }, INPUT_DELAY - ts.offset)
+            }, INPUT_DELAY )
         }else if(keyCode === 32){ // space
-            socket.emit('input', {press: false, x: 4, t: ts.now() + INPUT_DELAY})
+            socket.emit('input', {press: false, x: 4, t: ts.now + INPUT_DELAY, player: socket.id})
             setTimeout(() => {
                 game.handleInput(socket.id, {press: false, x: 4})
-            }, INPUT_DELAY - ts.offset)
+            }, INPUT_DELAY)
         }
     }
+
+    setTimeout(() => {
+        ts.ping()
+        socket.emit('ping')
+    }, 200)
+
+    socket.on('pong', st => {
+        ts.correct(st)
+        setTimeout(() => {
+            ts.ping()
+            socket.emit('ping')
+        }, ts.interval)
+    })
 })
 
 window.preload = function () {
@@ -184,7 +198,7 @@ window.setup = function (){
 window.draw = function (){
     if(showIntro){
         drawIntro()
-    }else if(game.state == 'wait'){
+    }else if(game.state == 0){
         drawLobby()        
     }else{
         drawPlaying()
@@ -195,14 +209,14 @@ function drawPlayer(p){
     push()
 
     if(p.invis_time > 0){
-        if(game.all_players[socket.id].color == p.color){
+        if(game.all_players[socket.id] == p.color){
             noFill()
         }else{
             pop()
             return
         }
     }else{
-        fill(color(p.color))
+        fill(color(COLORS[p.color]))
     }
     translate(p.x, p.y)
 
@@ -221,7 +235,7 @@ function drawPlayer(p){
         noFill()
         stroke(255)
         strokeWeight(1/20)
-        let r = 1 - 0.1*Math.cos((5000/p.shield_time - p.shield_time/1000)*2*Math.PI)
+        let r = 1 - 0.1*Math.cos((250/p.shield_time - p.shield_time/50)*2*Math.PI)
         circle(0, 0, r)
     }
 
@@ -239,8 +253,8 @@ function drawBomb(b){
     push()
     fill(230)
     translate(b.x, b.y)
-    if(b.state == 'ticking'){
-        let r = 0.45 + 0.05*Math.cos(b.time*2*Math.PI/1000)
+    if(b.state == 0){
+        let r = 0.45 + 0.05*Math.cos(b.time*2*Math.PI/20)
         beginShape()
         for(let i = 0; i < b.num; i++){
             vertex(r*cos(i*2*PI/b.num), r*sin(i*2*PI/b.num))
@@ -259,8 +273,8 @@ function drawBomb(b){
             fill(100)
             circle(0,0, 1/9)
         }
-    }else if(b.state == 'exploding'){
-        let r = 0.25 - 0.25*Math.cos(b.time*2*Math.PI/500)
+    }else if(b.state == 1){
+        let r = 0.25 - 0.25*Math.cos(b.time*2*Math.PI/10)
         beginShape()
         for(let i = 0; i < b.num; i++){
             vertex(r*cos(i*2*PI/b.num), r*sin(i*2*PI/b.num))
@@ -271,7 +285,7 @@ function drawBomb(b){
 }
 
 function drawExplosion(e){
-    particles.add(e.x, e.y, randomGaussian(0, 1), randomGaussian(0, 1), 0.2, 300)
+    particles.add(e.x, e.y, randomGaussian(0, 1), randomGaussian(0, 1), 0.2, 15)
     push()
     rectMode(CENTER)
     if(e.power){
@@ -282,7 +296,7 @@ function drawExplosion(e){
     let tail_len = Math.min(Math.max(e.max_len - e.len, 0), 1)
     translate(e.x, e.y)
 
-    rotate(e.dir*Math.PI/180)
+    rotate(e.dir*Math.PI/4)
     let size = Math.tanh(e.len)
     scale(size)
     quad(2/5, 0, 1/10, 1/2, -(2/5+tail_len), 0, 1/10, -1/2)
@@ -305,13 +319,11 @@ function drawPowerUp(p) {
     translate(p.x, p.y)
     rect(0, 0, 3/5)
 
+    textAlign(CENTER, CENTER)
     textSize(1/3)
-    fill(255);
-    if(p.label.length == 1){
-        text(p.label, -1/10, 1/8);
-    }else{
-        text(p.label, -1/5, 1/8);
-    }
+    fill(255)
+    let label = POWERUP_LABELS[p.label]
+    text(label, 0, 0)
 
     pop()
 }
@@ -454,37 +466,37 @@ function drawLobbyInfo(m){
 
     fill(200)
     textSize(1/3)
-    drawPowerUp({x: m.cols + 2, y: 1, label: 'B+'})
+    drawPowerUp({x: m.cols + 2, y: 1, label: 1})
     text('Bombs Up', m.cols + 3, 1.1)
 
-    drawPowerUp({x: m.cols + 2, y: 2, label: 'R+'})
+    drawPowerUp({x: m.cols + 2, y: 2, label: 3})
     text('Range Up', m.cols + 3, 2.1)
 
-    drawPowerUp({x: m.cols + 2, y: 3, label: 'S+'})
+    drawPowerUp({x: m.cols + 2, y: 3, label: 2})
     text('Speed Up', m.cols + 3, 3.1)
 
-    drawPowerUp({x: m.cols + 2, y: 4, label: 'K'})
+    drawPowerUp({x: m.cols + 2, y: 4, label: 8})
     text('Bomb Kick', m.cols + 3, 4.1)
 
-    drawPowerUp({x: m.cols + 2, y: 5, label: 'P'})
+    drawPowerUp({x: m.cols + 2, y: 5, label: 5})
     text('Piercing', m.cols + 3, 5.1)
 
-    drawPowerUp({x: m.cols + 2, y: 6, label: '8'})
-    text('8 Way', m.cols + 3, 6.1)
+    drawPowerUp({x: m.cols + 2, y: 6, label: 6})
+    text('Diagonal', m.cols + 3, 6.1)
 
-    drawPowerUp({x: m.cols + 2, y: 7, label: ' '})
+    drawPowerUp({x: m.cols + 2, y: 7, label: 12})
     text('Invisible', m.cols + 3, 7.1)
 
-    drawPowerUp({x: m.cols + 2, y: 8, label: 'SH'})
+    drawPowerUp({x: m.cols + 2, y: 8, label: 7})
     text('Shield', m.cols + 3, 8.1)
 
-    drawPowerUp({x: m.cols + 2, y: 9, label: 'TP'})
+    drawPowerUp({x: m.cols + 2, y: 9, label: 4})
     text('Teleport', m.cols + 3, 9.1)
 
-    drawPowerUp({x: m.cols + 2, y: 10, label: '?'})
+    drawPowerUp({x: m.cols + 2, y: 10, label: 13})
     text('Random', m.cols + 3, 10.1)
 
-    drawPowerUp({x: m.cols + 2, y: 11, label: '!'})
+    drawPowerUp({x: m.cols + 2, y: 11, label: 0})
     text('Curse', m.cols + 3, 11.1)
 
     drawFire({x: m.cols + 2, y: 12})
@@ -499,18 +511,21 @@ function drawLobbyInfo(m){
 function drawIntro(){
     background(0)
 
+    push()
     stroke(200)
     scale(SQUARE_SIZE)
     translate(3, 0)
     strokeWeight(1/20)
     textSize(1)
-    text('Armory Pests', (game.arena.cols*2/7), (game.arena.rows/2))
+    textAlign(CENTER, CENTER)
+    text('Armory Pests', game.arena.cols/2, game.arena.rows/2)
     textSize(1/3)
-    text('a game by wavy', 7, 7)
+    text('a game by wavy', game.arena.cols/2, game.arena.rows/2 + 1)
     if(gameReady){
         textSize(1/2)
-        text('Press Space to Play', (game.arena.cols/3), 8)
+        text('Press Space to Play', game.arena.cols/2, game.arena.rows/2 + 2)
     }
+    pop()
 }
 
 function drawScores(m){
@@ -518,7 +533,7 @@ function drawScores(m){
         let s = 0
         for(let id in game.all_players){
             // TODO cannot directly compare instances. why?
-            if(game.all_players[id].color == p.color){
+            if(game.all_players[id] == p.color){
                 s = game.scores[id]
             }
         }
@@ -529,13 +544,13 @@ function drawScores(m){
         translate(p.x, p.y)
         fill(0)
         noStroke()
+        textAlign(CENTER)
         if(s > 9){
-            textSize(1/5.5)
-            text(s, -1/10, 1/6)
+            textSize(1/4.5)
         }else{
-            textSize(1/5)
-            text(s, -1/15, 1/6)
+            textSize(1/4)
         }
+        text(s, 0, 1/6)
         pop()
     })
 }
@@ -554,17 +569,18 @@ function drawLobby(){
     
     line(1/2, 3.5, game.lobby.cols + 1/2, 3.5)
 
+    textAlign(CENTER, CENTER)
     textSize(1/2)
     if(game.lobby.players.length > 1){
-        text('Move here to start', 6, 2.25)
+        text('Move here to start', 9, 2)
     }else{
-        text('Waiting for players', 6, 2.25)
+        text('Waiting for players', 9, 2)
     }
     textSize(1)
-    text('Lobby', 7.25, 8)
+    text('Lobby', 9, 8)
     textSize(1/2)
-    text('Move with arrow keys', 5.75, 9)
-    text('Bomb with space', 6.5, 9.5)
+    text('Move with arrow keys', 9, 9.5)
+    text('Bomb with space', 9, 10)
     pop()
 
     drawLobbyInfo(game.lobby)
@@ -595,16 +611,17 @@ function drawPlaying(){
     
     drawObjects(game.arena)
     
-    if(game.state == 'endgame'){
+    if(game.state == 2){
         push()
         scale(SQUARE_SIZE)
         strokeWeight(1/20)
         textSize(1)
+        textAlign(CENTER, CENTER)
         rectMode(CENTER)
         fill(color(250, 200))
         rect(game.arena.cols/2 + 1, game.arena.rows/2, game.arena.cols + 2, 3)
         fill(0)
-        text('GAME SET', (game.arena.cols*3/8), game.arena.rows/2 + 1/4)
+        text('GAME SET', game.arena.cols/2, game.arena.rows/2)
         pop()
     }
 }

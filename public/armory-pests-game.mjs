@@ -9,7 +9,7 @@ class Avatar {
         this.max_bombs = 1
         this.bomb_len = 2
         this.bomb_spd = 10
-        this.bomb_fuse = 3000
+        this.bomb_fuse = 3
         this.bomb_split = 4
         this.bomb_power = false
         this.bomb_kick = false
@@ -42,8 +42,8 @@ class Avatar {
             if(this.dirs.length > 1){
                 var d1 = this.dirs[this.dirs.length - 2]
                 var d2 = this.dirs[this.dirs.length - 1]
-                if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 180) 
-                    || (this.blocked_down && d1 == 90) || (this.blocked_up && d1 == 270)){
+                if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 2) 
+                    || (this.blocked_down && d1 == 1) || (this.blocked_up && d1 == 3)){
                     dir = d2
                 }else{
                     dir = d1
@@ -52,7 +52,7 @@ class Avatar {
                 dir = this.dirs[this.dirs.length - 1]
             }
             if(this.reverse_time > 0){
-                dir = (dir + 180) % 360
+                dir = (dir + 4) % 8
             }
 
             return dir
@@ -61,8 +61,8 @@ class Avatar {
 
     update(dt){
         var d1 = this.direction
-        var dir = d1*Math.PI/180
-        var spd_err = this.spd_sp - this.spd;
+        var dir = d1*Math.PI/4
+        var spd_err = this.spd_sp*this.max_spd - this.spd;
         var spd = this.spd + Math.sign(spd_err)*Math.min(Math.abs(spd_err), this.max_spd/3)
         spd = Math.max(Math.min(spd, this.max_spd), 0)
         spd = Math.min(spd, 7.5)
@@ -70,17 +70,17 @@ class Avatar {
             spd = Math.min(spd, 2.5)
         }
         
-        if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 180) 
-            || (this.blocked_down && d1 == 90) || (this.blocked_up && d1 == 270)){
+        if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 4) 
+            || (this.blocked_down && d1 == 2) || (this.blocked_up && d1 == 6)){
             this.spd = 0
         }else{
             this.spd = spd
-            this.x += Math.cos(dir)*spd*dt/1000
-            this.y += Math.sin(dir)*spd*dt/1000;
+            this.x += Math.cos(dir)*spd*dt*0.02
+            this.y += Math.sin(dir)*spd*dt*0.02;
         }
 
         for(var i = this.live_bombs.length - 1; i >= 0; i--){
-            if(this.live_bombs[i].state == 'dead'){
+            if(this.live_bombs[i].state == 1 && this.live_bombs[i].time <= 0){
                 delete this.live_bombs[i]
                 this.live_bombs.splice(i, 1)
             }
@@ -102,6 +102,97 @@ class Avatar {
             this.invis_time -= dt
         }
     }
+
+    serialize(){
+        let n_bytes = Math.ceil((2*7 + 1*10 + 1 + this.dirs.length + 1 + this.live_bombs.length*16)/2)*2
+        let buffer = new ArrayBuffer(n_bytes)
+        let float_view = new Int16Array(buffer)
+        float_view[0] = this.x*256
+        float_view[1] = this.y*256
+        float_view[2] = this.spd*256
+        float_view[3] = this.shield_time
+        float_view[4] = this.reverse_time
+        float_view[5] = this.poop_time
+        float_view[6] = this.invis_time
+
+        let int_view = new Uint8Array(buffer, 14)
+        int_view[0] = this.color
+        int_view[1] = Math.floor(this.max_spd)
+        int_view[2] = this.max_bombs
+        int_view[3] = this.bomb_len
+        int_view[4] = this.bomb_spd
+        int_view[5] = this.bomb_fuse
+        int_view[6] = (this.bomb_split == 8 ? 1 : 0) << 2 | (this.bomb_power ? 1 : 0) << 1 | (this.bomb_kick ? 1 : 0)
+        int_view[7] = (this.slowed ? 1 : 0) << 5 | (this.spd_sp) << 4 | (this.blocked_left ? 1 : 0) << 3 |
+                        (this.blocked_down ? 1 : 0) << 2 | (this.blocked_right ? 1 : 0) << 1 | (this.blocked_up ? 1 : 0)
+        int_view[8] = this.last_dir
+        int_view[9] = this.slide_dir + 1
+
+        int_view[10] = this.dirs.length
+        for(let i = 0; i < this.dirs.length; i++){
+            int_view[11 + i] = this.dirs[i] 
+        }
+        int_view[11 + this.dirs.length] = this.live_bombs.length
+        let k = 12 + this.dirs.length
+        this.live_bombs.forEach(bomb => {
+            let bomb_buf = bomb.serialize()
+            int_view.set(new Uint8Array(bomb_buf), k)
+            k += bomb_buf.byteLength
+        })
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let float_view = new Int16Array(buffer)
+        this.x = float_view[0]/256
+        this.y = float_view[1]/256
+        this.spd = float_view[2]/256
+        this.shield_time = float_view[3]
+        this.reverse_time = float_view[4]
+        this.poop_time = float_view[5]
+        this.invis_time = float_view[6]
+
+        let int_view = new Uint8Array(buffer, 14)
+        this.color = int_view[0]
+        this.max_spd = int_view[1] + 0.5
+        this.max_bombs = int_view[2]
+        this.bomb_len = int_view[3]
+        this.bomb_spd = int_view[4]
+        this.bomb_fuse = int_view[5]
+        this.bomb_split = 4 + 4*(int_view[6] >> 2 & 1)
+        this.bomb_power = int_view[6] >> 1 & 1 > 0
+        this.bomb_kick = int_view[6] & 1 > 0
+        this.slowed = int_view[7] >> 5 & 1 > 0
+        this.spd_sp = int_view[7] >> 4 & 1
+
+        this.blocked_left = int_view[7] >> 3 & 1 > 0
+        this.blocked_down = int_view[7] >> 2 & 1 > 0
+        this.blocked_right = int_view[7] >> 1 & 1 > 0
+        this.blocked_up = int_view[7] & 1 > 0
+        this.last_dir = int_view[8]
+        this.slide_dir = int_view[9] - 1
+
+        let dir_len = int_view[10]
+        for(let i = 0; i < dir_len; i++){
+            if(i >= this.dirs.length){
+                this.dirs.push(0)
+            }
+            this.dirs[i] = int_view[11 + i]
+        }
+        this.dirs.length = dir_len
+
+        let bombs_len = int_view[11 + dir_len]
+        let k = 14 + 12 + this.dirs.length
+        for(let i = 0; i < bombs_len; i++){
+            if(i >= this.live_bombs.length){
+                this.live_bombs.push(new Bomb(this.x, this.y, this.bomb_spd, this.bomb_fuse*50, this.bomb_len, this.bomb_split, this.bomb_power))
+            }
+            this.live_bombs[i].deserialize(buffer.slice(k, k + 16))
+            k += 16
+        }
+        this.live_bombs.length = bombs_len
+    }
 }
 
 class Bomb {
@@ -110,15 +201,14 @@ class Bomb {
         this.y = y
         this.spd = spd
         this.time = time
-        this.state = 'ticking'
-        this.num = num
-        this.len = len
-        this.size = 30
-        this.intangible = true
-        this.power = power
         this.vx = 0
         this.vy = 0
-
+        this.num = num
+        this.len = len
+        
+        this.state = 0
+        this.intangible = true
+        this.power = power
         this.slowed = false
 
         this.blocked_up = false
@@ -129,11 +219,6 @@ class Bomb {
 
     update(dt){
         this.time -= dt
-        if(this.time <= 0){
-            if(this.state == 'exploding'){
-                this.state = 'dead'
-            }
-        }
 
         if(this.blocked_up){
             this.vy = Math.max(0, this.vy)
@@ -148,16 +233,65 @@ class Bomb {
             this.vx = Math.min(0, this.vx)
         }
 
-        this.x += this.vx*dt/1000
-        this.y += this.vy*dt/1000
+        this.x += this.vx*dt*0.02
+        this.y += this.vy*dt*0.02
 
         if(this.slowed){
-            this.vx -= this.vx*dt/50
-            this.vy -= this.vy*dt/50
+            this.vx -= this.vx*dt*0.5
+            this.vy -= this.vy*dt*0.5
         }else{
-            this.vx -= this.vx*dt/1000
-            this.vy -= this.vy*dt/1000
+            this.vx -= this.vx*dt*0.02
+            this.vy -= this.vy*dt*0.02
         }
+    }
+
+    serialize(){
+        let n_bytes = 2*6 + 3 + 1
+        let buffer = new ArrayBuffer(n_bytes)
+        let float_view = new Int16Array(buffer)
+        float_view[0] = this.x*256
+        float_view[1] = this.y*256
+        float_view[2] = this.spd*256
+        float_view[3] = this.time
+        float_view[4] = this.vx*256
+        float_view[5] = this.vy*256
+
+        let int_view = new Uint8Array(buffer, 12)
+        int_view[0] = this.num
+        int_view[1] = this.len
+        int_view[2] = 0
+        int_view[2] |= (this.state) << 7
+        int_view[2] |= (this.intangible ? 1 : 0) << 6
+        int_view[2] |= (this.power ? 1 : 0) << 5
+        int_view[2] |= (this.slowed ? 1 : 0) << 4
+        int_view[2] |= (this.blocked_left ? 1 : 0) << 3
+        int_view[2] |= (this.blocked_down ? 1 : 0) << 2
+        int_view[2] |= (this.blocked_right ? 1 : 0) << 1
+        int_view[2] |= (this.blocked_up ? 1 : 0)
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let float_view = new Int16Array(buffer)
+        this.x = float_view[0]/256
+        this.y = float_view[1]/256
+        this.spd = float_view[2]/256
+        this.time = float_view[3]
+        this.vx = float_view[4]/256
+        this.vy = float_view[5]/256
+
+        let int_view = new Uint8Array(buffer, 12)
+        this.num = int_view[0]
+        this.len = int_view[1]
+        this.state = int_view[2] >> 7 & 1
+        this.intangible = int_view[2] >> 6 & 1 == 1
+        this.power = int_view[2] >> 5 & 1 == 1
+        this.slowed = int_view[2] >> 4 & 1 == 1
+        this.blocked_left = int_view[2] >> 3 & 1 == 1
+        this.blocked_down = int_view[2] >> 2 & 1 == 1
+        this.blocked_right = int_view[2] >> 1 & 1 == 1
+        this.blocked_up = int_view[2] >> 0 & 1 == 1
     }
 }
 
@@ -173,12 +307,42 @@ class Explosion {
     }
 
     update(dt){
-        var dir = this.dir*Math.PI/180;
-        var dx = Math.cos(dir)*this.spd*dt/1000
-        var dy = Math.sin(dir)*this.spd*dt/1000
+        var dir = this.dir*Math.PI/4;
+        var dx = Math.cos(dir)*this.spd*dt*0.02
+        var dy = Math.sin(dir)*this.spd*dt*0.02
         this.x += dx
         this.y += dy
         this.len -= Math.hypot(dx, dy)
+    }
+
+    serialize(){
+        let n_bytes = 2*4 + 3 + 1
+        let buffer = new ArrayBuffer(n_bytes)
+        let float_view = new Int16Array(buffer)
+        float_view[0] = this.x*256
+        float_view[1] = this.y*256
+        float_view[2] = this.spd*256
+        float_view[3] = this.len*256
+
+        let int_view = new Uint8Array(buffer, 8)
+        int_view[0] = this.dir
+        int_view[1] = this.max_len
+        int_view[2] = this.power ? 1 : 0
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let float_view = new Int16Array(buffer)
+        this.x = float_view[0]/256
+        this.y = float_view[1]/256
+        this.spd = float_view[2]/256
+        this.len = float_view[3]/256
+
+        let int_view = new Uint8Array(buffer, 8)
+        this.dir = int_view[0]
+        this.max_len = int_view[1]
+        this.power = int_view[2] == 1
     }
 }
 
@@ -191,6 +355,22 @@ class Block {
     update(dt){
 
     }
+
+    serialize(){
+        let n_bytes = 2
+        let buffer = new ArrayBuffer(n_bytes)
+        let int_view = new Uint8Array(buffer)
+        int_view[0] = this.x
+        int_view[1] = this.y
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let int_view = new Uint8Array(buffer)
+        this.x = int_view[0]
+        this.y = int_view[1]
+    }
 }
 
 class Powerup {
@@ -199,13 +379,35 @@ class Powerup {
         this.y = y
         this.type = type
         this.label = label
-        this.indestructable_time = 1000
+        this.indestructable_time = 50
     }
 
     update(dt){
         if(this.indestructable_time > 0){
             this.indestructable_time -= dt
         }
+    }
+
+    serialize(){
+        let n_bytes = 5
+        let buffer = new ArrayBuffer(n_bytes)
+        let int_view = new Uint8Array(buffer)
+        int_view[0] = this.x
+        int_view[1] = this.y
+        int_view[2] = this.indestructable_time
+        int_view[3] = this.type
+        int_view[4] = this.label
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let int_view = new Uint8Array(buffer)
+        this.x = int_view[0]
+        this.y = int_view[1]
+        this.indestructable_time = int_view[2]
+        this.type = int_view[3]
+        this.label = int_view[4]
     }
 }
 
@@ -217,6 +419,22 @@ class Wall {
 
     update(dt){
 
+    }
+
+    serialize(){
+        let n_bytes = 2
+        let buffer = new ArrayBuffer(n_bytes)
+        let int_view = new Uint8Array(buffer)
+        int_view[0] = this.x
+        int_view[1] = this.y
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let int_view = new Uint8Array(buffer)
+        this.x = int_view[0]
+        this.y = int_view[1]
     }
 }
 
@@ -230,6 +448,22 @@ class Ice {
     update(dt){
 
     }
+
+    serialize(){
+        let n_bytes = 2
+        let buffer = new ArrayBuffer(n_bytes)
+        let int_view = new Uint8Array(buffer)
+        int_view[0] = this.x
+        int_view[1] = this.y
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let int_view = new Uint8Array(buffer)
+        this.x = int_view[0]
+        this.y = int_view[1]
+    }
 }
 
 /* no bomb kick */
@@ -242,6 +476,22 @@ class Mud {
     update(dt){
 
     }
+
+    serialize(){
+        let n_bytes = 2
+        let buffer = new ArrayBuffer(n_bytes)
+        let int_view = new Uint8Array(buffer)
+        int_view[0] = this.x
+        int_view[1] = this.y
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let int_view = new Uint8Array(buffer)
+        this.x = int_view[0]
+        this.y = int_view[1]
+    }
 }
 
 /* kills players */
@@ -253,6 +503,22 @@ class Fire {
 
     update(dt){
 
+    }
+
+    serialize(){
+        let n_bytes = 2
+        let buffer = new ArrayBuffer(n_bytes)
+        let int_view = new Uint8Array(buffer)
+        int_view[0] = this.x
+        int_view[1] = this.y
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let int_view = new Uint8Array(buffer)
+        this.x = int_view[0]
+        this.y = int_view[1]
     }
 }
 
@@ -270,6 +536,42 @@ class Teleporter {
     update(dt){
 
     }
+
+    serialize(){
+        let n_bytes = (4 + 1 + 1 + this.already_teleported.length)
+        let buffer = new ArrayBuffer(n_bytes)
+        let int_view = new Uint8Array(buffer)
+        int_view[0] = this.x1
+        int_view[1] = this.y1
+        int_view[2] = this.x2
+        int_view[3] = this.y2
+
+        int_view[4] = this.disabled ? 1 : 0
+        int_view[5] = this.already_teleported.length
+        for(let i = 0; i < this.already_teleported.length; i++){
+            int_view[6 + i] = this.already_teleported[i]
+        }
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let int_view = new Uint8Array(buffer)
+        this.x1 = int_view[0]
+        this.y1 = int_view[1]
+        this.x2 = int_view[2]
+        this.y2 = int_view[3]
+
+        this.disabled = int_view[4] > 0
+        let at_len = int_view[5]
+        for(let i = 0; i < at_len; i++){
+            if(i >= this.already_teleported.length){
+                this.already_teleported.push(0)
+            }
+            this.already_teleported[i] = int_view[6 + i]
+        }
+        this.already_teleported.length = at_len
+    }
 }
 
 class RoomManager {
@@ -286,13 +588,258 @@ class RoomManager {
         this.rows = rows
         this.cols = cols
         this.client = client
-        this.cbq = []
+        this.evhands = []
+    }
+
+    serialize(){
+        let n_bytes = 2*2 + 2*(9)
+
+        let player_buffers = []
+        this.players.forEach(p => {
+            let x = p.serialize()
+            player_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let explosion_buffers = []
+        this.explosions.forEach(e => {
+            let x = e.serialize()
+            explosion_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let block_buffers = []
+        this.blocks.forEach(e => {
+            let x = e.serialize()
+            block_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let wall_buffers = []
+        this.walls.forEach(e => {
+            let x = e.serialize()
+            wall_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let powerup_buffers = []
+        this.powerups.forEach(e => {
+            let x = e.serialize()
+            powerup_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let ice_buffers = []
+        this.ices.forEach(e => {
+            let x = e.serialize()
+            ice_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let mud_buffers = []
+        this.muds.forEach(e => {
+            let x = e.serialize()
+            mud_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let fire_buffers = []
+        this.fires.forEach(e => {
+            let x = e.serialize()
+            fire_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let teleporter_buffers = []
+        this.teleporters.forEach(e => {
+            let x = e.serialize()
+            teleporter_buffers.push(x)
+            n_bytes += x.byteLength + 1
+        })
+
+        let buffer = new ArrayBuffer(Math.ceil(n_bytes/2)*2)
+        let size_view = new Uint16Array(buffer)
+        size_view[0] = this.rows
+        size_view[1] = this.cols
+        size_view[2] = this.players.length
+        size_view[3] = this.explosions.length
+        size_view[4] = this.blocks.length
+        size_view[5] = this.walls.length
+        size_view[6] = this.powerups.length
+        size_view[7] = this.ices.length
+        size_view[8] = this.muds.length
+        size_view[9] = this.fires.length
+        size_view[10] = this.teleporters.length
+
+        let byte_view = new Uint8Array(buffer, 22)
+        let o = 0
+        player_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+        explosion_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+        block_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+        wall_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+        powerup_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+        ice_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+        mud_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+        fire_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+        teleporter_buffers.forEach(x => {
+            byte_view[o] = x.byteLength
+            byte_view.set(new Uint8Array(x), o + 1)
+            o += x.byteLength + 1
+        })
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let size_view = new Uint16Array(buffer)
+        this.rows = size_view[0]
+        this.cols = size_view[1]
+        let n_players = size_view[2]
+        let n_explosions = size_view[3]
+        let n_blocks = size_view[4]
+        let n_walls = size_view[5]
+        let n_powerups = size_view[6]
+        let n_ices = size_view[7]
+        let n_muds = size_view[8]
+        let n_fires = size_view[9]
+        let n_teleporters = size_view[10]
+
+        let o = 0
+        let byte_view = new Uint8Array(buffer, o + 22)
+        for(let i = 0; i < n_players; i++){
+            if(i >= this.players.length){
+                this.players.push(new Avatar(0, 0, 0))
+            }
+            let n = byte_view[o]
+            let player_buf = buffer.slice(22 + o + 1, 22 + o + 1 + n)
+            this.players[i].deserialize( player_buf )
+            o += n + 1
+        }
+        this.players.length = n_players
+
+        for(let i = 0; i < n_explosions; i++){
+            if(i >= this.explosions.length){
+                this.explosions.push(new Explosion(0, 0, 0, 0, 1, false))
+            }
+            let n = byte_view[o]
+            this.explosions[i].deserialize( buffer.slice(22 + o + 1, 22 + o + 1 + n) )
+            o += n + 1
+        }
+        this.explosions.length = n_explosions
+
+        for(let i = 0; i < n_blocks; i++){
+            if(i >= this.blocks.length){
+                this.blocks.push(new Block(0, 0))
+            }
+            let n = byte_view[o]
+            this.blocks[i].deserialize( buffer.slice(22 + o + 1, 22 + o + 1 + n) )
+            o += n + 1
+        }
+        this.blocks.length = n_blocks
+
+        for(let i = 0; i < n_walls; i++){
+            if(i >= this.walls.length){
+                this.walls.push(new Wall(0, 0))
+            }
+            let n = byte_view[o]
+            this.walls[i].deserialize( buffer.slice(22 + o + 1, 22 + o + 1 + n) )
+            o += n + 1
+        }
+        this.walls.length = n_walls
+
+        for(let i = 0; i < n_powerups; i++){
+            if(i >= this.powerups.length){
+                this.powerups.push(new Powerup(0, 0, 0, 0))
+            }
+            let n = byte_view[o]
+            this.powerups[i].deserialize( buffer.slice(22 + o + 1, 22 + o + 1 + n) )
+            o += n + 1
+        }
+        this.powerups.length = n_powerups
+
+        for(let i = 0; i < n_ices; i++){
+            if(i >= this.ices.length){
+                this.ices.push(new Ice(0, 0))
+            }
+            let n = byte_view[o]
+            this.ices[i].deserialize( buffer.slice(22 + o + 1, 22 + o + 1 + n) )
+            o += n + 1
+        }
+        this.ices.length = n_ices
+
+        for(let i = 0; i < n_muds; i++){
+            if(i >= this.muds.length){
+                this.muds.push(new Mud(0, 0))
+            }
+            let n = byte_view[o]
+            this.muds[i].deserialize( buffer.slice(22 + o + 1, 22 + o + 1 + n) )
+            o += n + 1
+        }
+        this.muds.length = n_muds
+
+        for(let i = 0; i < n_fires; i++){
+            if(i >= this.fires.length){
+                this.fires.push(new Fire(0, 0))
+            }
+            let n = byte_view[o]
+            this.fires[i].deserialize( buffer.slice(22 + o + 1, 22 + o + 1 + n) )
+            o += n + 1
+        }
+        this.fires.length = n_fires
+
+        for(let i = 0; i < n_teleporters; i++){
+            if(i >= this.teleporters.length){
+                this.teleporters.push(new Teleporter(0, 0, 0, 0))
+            }
+            let n = byte_view[o]
+            this.teleporters[i].deserialize( buffer.slice(22 + o + 1, 22 + o + 1 + n) )
+            o += n + 1
+        }
+        this.teleporters.length = n_teleporters
     }
 
     fireEvent(ev, args){
         if(!this.client){
-            this.cbq.push({'ev': ev, 'args': args})
+            this.evhands.forEach(h => {
+                h( { ev: ev, args: args })
+            })
         }
+    }
+
+    addEventHandler(h){
+        this.evhands.push(h)
     }
     
     update(dt){
@@ -301,7 +848,7 @@ class RoomManager {
             p.live_bombs.forEach((b) => {
                 b.update(dt)
 
-                if(b.time <= 0 && b.state == 'ticking'){
+                if(b.time <= 0 && b.state == 0){
                     this.explode(b)
                 }
             })
@@ -335,7 +882,7 @@ class RoomManager {
             x.update(dt)
         })
         
-        this.checkCollisions(dt)
+        this.checkCollisions()
     }
 
     dropBomb(p){
@@ -350,27 +897,27 @@ class RoomManager {
                 okay &= !(e instanceof Bomb)
             })
             if(okay){
-                var bomb = new Bomb(bomb_x, bomb_y, p.bomb_spd, p.bomb_fuse, p.bomb_len, p.bomb_split, p.bomb_power)
+                var bomb = new Bomb(bomb_x, bomb_y, p.bomb_spd, p.bomb_fuse*50, p.bomb_len, p.bomb_split, p.bomb_power)
                 p.live_bombs.push(bomb)
             }
         }
     }
 
     explode(b){
-        b.state = 'exploding'
-        b.time = 250
+        b.state = 1
+        b.time = 12
         this.createExplosions(b.x, b.y, b.spd, b.num, b.len, b.power)
         this.fireEvent('explode', b)
     }
 
     pickUpPower(player, power){
-        if(power.type == 'B+'){
+        if(power.type == 1){
             player.max_bombs += 1
-        }else if(power.type == 'S+'){
+        }else if(power.type == 2){
             player.max_spd += 1
-        }else if(power.type == 'R+'){
+        }else if(power.type == 3){
             player.bomb_len += 1
-        }else if(power.type == 'TP'){
+        }else if(power.type == 4){
             if(!this.client && this.players.length > 1){
                 var tpi = this.players.indexOf(player)
                 var opi = Math.floor(Math.random()*(this.players.length - 1))
@@ -385,26 +932,26 @@ class RoomManager {
                 this.players[opi].y = power.y
                 this.fireEvent('teleport', [player, this.players[opi]])
             }
-        }else if(power.type == 'P'){
+        }else if(power.type == 5){
             player.bomb_power = true
-        }else if(power.type == '8'){
+        }else if(power.type == 6){
             player.bomb_split = 8
-        }else if(power.type == 'SH'){
-            player.shield_time += 10000
-        }else if(power.type == 'K'){
+        }else if(power.type == 7){
+            player.shield_time += 500
+        }else if(power.type == 8){
             player.bomb_kick = true
-        }else if(power.type == '-1'){
-            player.reverse_time = 10000
-        }else if(power.type == '!'){
-            player.poop_time = 9000
-        }else if(power.type == '*'){
+        }else if(power.type == 9){
+            player.reverse_time = 500
+        }else if(power.type == 10){
+            player.poop_time = 450
+        }else if(power.type == 11){
             player.max_bombs = 8
             player.max_spd = 7.5
             player.bomb_len = 10
             player.bomb_kick = true
             player.bomb_split = 8
             player.bomb_power = true
-        }else if(power.type == '0'){
+        }else if(power.type == 0){
             player.max_bombs = 1
             player.max_spd = 2.5
             player.bomb_len = 2
@@ -412,8 +959,8 @@ class RoomManager {
             player.bomb_split = 4
             player.bomb_power = false
             player.shield_time = 0
-        }else if(power.type == ' '){
-            player.invis_time = 10000
+        }else if(power.type == 12){
+            player.invis_time = 500
         }
     }
 
@@ -484,13 +1031,13 @@ class RoomManager {
                     })
 
                     if(adj_clear && adjy > p.y && adjy <= this.rows){
-                        p.slide_dir = 90
+                        p.slide_dir = 2
                     }else if(adj_clear && adjy < p.y && adjy >= 1){
-                        p.slide_dir = 270
+                        p.slide_dir = 6
                     }
                     p.blocked_right = true
                     
-                }else if(p.direction == 90 && p.y <= this.rows - 1){
+                }else if(p.direction == 2 && p.y <= this.rows - 1){
                     var es = this.getEntitiesAt(adjx, adjy + 1)
                     var adj_clear = true
                     es.forEach((e) => {
@@ -500,11 +1047,11 @@ class RoomManager {
                     if(adj_clear && adjx > p.x && adjx <= this.cols){
                         p.slide_dir = 0
                     }else if(adj_clear && adjx < p.x && adjx >= 1){
-                        p.slide_dir = 180
+                        p.slide_dir = 4
                     }
                     p.blocked_down = true
                     
-                }else if(p.direction == 180 && p.x >= 2){
+                }else if(p.direction == 4 && p.x >= 2){
                     var es = this.getEntitiesAt(adjx - 1, adjy)
                     var adj_clear = true
                     es.forEach((e) => {
@@ -512,13 +1059,13 @@ class RoomManager {
                     })
                     
                     if(adj_clear && adjy > p.y && adjy <= this.rows){
-                        p.slide_dir = 90
+                        p.slide_dir = 2
                     }else if(adj_clear && adjy < p.y && adjy >= 1){
-                        p.slide_dir = 270
+                        p.slide_dir = 6
                     }
                     p.blocked_left = true
                     
-                }else if(p.direction == 270 && p.y >= 2){
+                }else if(p.direction == 6 && p.y >= 2){
                     var es = this.getEntitiesAt(adjx, adjy - 1)
                     var adj_clear = true
                     es.forEach((e) => {
@@ -528,7 +1075,7 @@ class RoomManager {
                     if(adj_clear && adjx > p.x && adjx <= this.cols){
                         p.slide_dir = 0
                     }else if(adj_clear && adjx < p.x && adjx >= 1){
-                        p.slide_dir = 180
+                        p.slide_dir = 4
                     }
                     p.blocked_up = true
 
@@ -555,7 +1102,7 @@ class RoomManager {
                         }
                     }else{
                         p.blocked_left = true
-                        if(!b.slowed && p.bomb_kick && p.direction == 180 && p.spd > 0){
+                        if(!b.slowed && p.bomb_kick && p.direction == 4 && p.spd > 0){
                             b.vx = -(p.spd + 3)
                         }else{
                             b.vx = 0
@@ -564,14 +1111,14 @@ class RoomManager {
                 }else{
                     if(dy > 0){
                         p.blocked_down = true
-                        if(!b.slowed && p.bomb_kick && p.direction == 90 && p.spd > 0){
+                        if(!b.slowed && p.bomb_kick && p.direction == 2 && p.spd > 0){
                             b.vy = p.spd + 3
                         }else{
                             b.vy = 0
                         }
                     }else{
                         p.blocked_up = true
-                        if(!b.slowed && p.bomb_kick && p.direction == 270 && p.spd > 0){
+                        if(!b.slowed && p.bomb_kick && p.direction == 6 && p.spd > 0){
                             b.vy = -(p.spd + 3)
                         }else{
                             b.vy = 0
@@ -585,7 +1132,7 @@ class RoomManager {
         }
     }
 
-    checkCollisions(dt){
+    checkCollisions(){
         // explosions on walls
         for(var i = this.explosions.length - 1; i >= 0; i--){
             for(var j = this.walls.length - 1; j >= 0; j--){
@@ -636,7 +1183,7 @@ class RoomManager {
                 var d = Math.hypot(this.players[j].x - this.explosions[i].x, this.players[j].y - this.explosions[i].y)
                 if(d < 0.33 && this.players[j].shield_time <= 0){
                     this.players[j].live_bombs.forEach((b) => {
-                        if(b.state == 'ticking'){
+                        if(b.state == 0){
                             this.explode(b)
                         }
                     })
@@ -657,7 +1204,7 @@ class RoomManager {
             // explosions on bombs
             for(var i = p.live_bombs.length - 1; i >= 0; i--){
                 for(var j = 0; j < this.explosions.length; j++){
-                    if(p.live_bombs[i].state == 'ticking'){
+                    if(p.live_bombs[i].state == 0){
                         var d = Math.hypot(this.explosions[j].x - p.live_bombs[i].x, this.explosions[j].y - p.live_bombs[i].y)
                         if(d < 0.5){
                             this.explode(p.live_bombs[i])
@@ -709,7 +1256,7 @@ class RoomManager {
             if(p.x < 1){
                 p.blocked_left = true
                 p.x = Math.max(p.x, 1)
-                if(p.direction == 180){
+                if(p.direction == 4){
                     p.spd = 0
                 }
             }
@@ -723,14 +1270,14 @@ class RoomManager {
             if(p.y < 1){
                 p.blocked_up = true
                 p.y = Math.max(p.y, 1)
-                if(p.direction == 270){
+                if(p.direction == 6){
                     p.spd = 0
                 }
             }
             if(p.y > this.rows){
                 p.blocked_down = true
                 p.y = Math.min(p.y, this.rows)
-                if(p.direction == 90){
+                if(p.direction == 2){
                     p.spd = 0
                 }
             }
@@ -789,7 +1336,7 @@ class RoomManager {
             for(var j = this.players.length - 1; j >= 0; j--){
                 if(Math.hypot(this.players[j].x - x.x, this.players[j].y - x.y) < 0.5){
                     this.players[j].live_bombs.forEach((b) => {
-                        if(b.state == 'ticking'){
+                        if(b.state == 0){
                             this.explode(b)
                         }
                     })
@@ -810,7 +1357,7 @@ class RoomManager {
                 })
 
                 this.players.forEach((p) => {
-                    let ati = x.already_teleported.indexOf(p)
+                    let ati = x.already_teleported.indexOf(p.color)
                     if(ati < 0 && !x.disabled){
                         if(Math.hypot(p.x - x.x1, p.y - x.y1) < 0.2){
                             let delta_x = p.x - x.x1
@@ -819,7 +1366,7 @@ class RoomManager {
                             p.y = x.y2 + delta_y
 
                             this.fireEvent('teleport', [{x: x.x2 + delta_x, y: x.y2 + delta_y}, {x: x.x1 + delta_x, y: x.y1 + delta_y}])
-                            x.already_teleported.push(p)
+                            x.already_teleported.push(p.color)
                         }else if(Math.hypot(p.x - x.x2, p.y - x.y2) < 0.2){
                             let delta_x = p.x - x.x2
                             let delta_y = p.y - x.y2
@@ -827,15 +1374,19 @@ class RoomManager {
                             p.y = x.y1 + delta_y
 
                             this.fireEvent('teleport', [{x: x.x1 + delta_x, y: x.y1 + delta_y}, {x: x.x2 + delta_x, y: x.y2 + delta_y}])
-                            x.already_teleported.push(p)
+                            x.already_teleported.push(p.color)
                         }
                     }
                 })
                 
                 for(let i = x.already_teleported.length - 1; i >= 0; i--){
-                    let z = x.already_teleported[i]
-                    if(Math.hypot(z.x - x.x1, z.y - x.y1) > 0.717 && Math.hypot(z.x - x.x2, z.y - x.y2) > 0.717){
+                    let z = this.players.find(p => p.color == x.already_teleported[i])
+                    if(!z){
                         x.already_teleported.splice(i, 1)
+                    }else{
+                        if(Math.hypot(z.x - x.x1, z.y - x.y1) > 0.717 && Math.hypot(z.x - x.x2, z.y - x.y2) > 0.717){
+                            x.already_teleported.splice(i, 1)
+                        }
                     }
                 }
             })
@@ -854,7 +1405,7 @@ class RoomManager {
 
     createExplosions(x, y, spd, num, len, power){
         for(var i = 0; i < num; i++){
-            var dir = 360/num*i
+            var dir = 8/num*i
             var explosion = new Explosion(x, y, spd, dir, len, power)
             this.explosions.push(explosion)
         }
@@ -908,52 +1459,52 @@ class RoomManager {
         return teleporter
     }
 
-    createPowerUp(x, y, type = 'random'){
-        var label = type
-        if(type == 'random'){
+    createPowerUp(x, y, type = 255){
+        let label = type
+        if(type == 255){
             var r = Math.floor(Math.random()*35)
             if(r >= 0 && r < 6){
-                type = 'B+'
-                label = 'B+'
+                type = 1
+                label = 1
             }else if(r >= 6 && r < 12){
-                type = 'R+'
-                label = 'R+'
+                type = 3
+                label = 3
             }else if(r >= 12 && r < 18){
-                type = 'S+'
-                label = 'S+'
+                type = 2
+                label = 2
             }else if(r >= 18 && r < 20){
-                type = 'K'
-                label = 'K'
+                type = 8
+                label = 8
             }else if(r >= 20 && r < 22){
-                type = 'P'
-                label = 'P'
+                type = 5
+                label = 5
             }else if(r >= 22 && r < 24){
-                type = '8'
-                label = '8'
+                type = 6
+                label = 6
             }else if(r >= 24 && r < 27){
-                type = 'SH'
-                label = 'SH'
+                type = 7
+                label = 7
             }else if(r >= 27 && r < 29){
-                type = ' '
-                label = ' '
+                type = 12
+                label = 12
             }else if(r >= 29 && r < 31){
-                type = '-1'
-                label = '!'
+                type = 9
+                label = 0
             }else if(r >= 31 && r < 33){
-                type = '!'
-                label = '!'
+                type = 10
+                label = 0
             }else if(r >= 33 && r < 34){
-                type = '0'
-                label = '!'
+                type = 0
+                label = 0
             }else if(r >= 34 && r < 35){
-                type = 'TP'
-                label = 'TP'
+                type = 4
+                label = 4
             }
 
             if(Math.random()*5 < 1){
-                label = '?'
-                if(type != '0' && Math.floor(Math.random()*20) < 1){
-                    type = '*'
+                label = 13
+                if(type != 0 && Math.floor(Math.random()*20) < 1){
+                    type = 11
                 }
             }
         }
@@ -1063,31 +1614,42 @@ class RoomManager {
         this.ices = []
         this.muds = []
         this.fires = []
-        this. teleporters = []
-        this.cbq = []
+        this.teleporters = []
     }
 }
 
-const CLOSING_TIME = 60000
-const CLOSING_RATE = 700
+const CLOSING_TIME = 3000
+const CLOSING_RATE = 35
 
 const ROWS = 13
 const COLS = 17
 
 const SPAWN_Y = [[7], [7, 7], [13, 1, 13], [1, 1, 13, 13], [1, 1, 13, 13, 7], [1, 3, 3, 11, 11, 13], [1, 3, 3, 11, 11, 13, 7], [1, 1, 13, 13, 1, 13, 7, 7], [1, 1, 13, 13, 1, 13, 7, 7, 7], [1, 1, 13, 13, 1, 13, 4, 4, 10, 10]]
 const SPAWN_X = [[9], [1, 17], [1, 9, 17], [1, 17, 1, 17], [1, 17, 1, 17, 9], [9, 1, 17, 1, 17, 9], [9, 1, 17, 1, 17, 9, 9], [1, 17, 1, 17, 9, 9, 5, 13], [1, 17, 1, 17, 9, 9, 3, 9, 15], [1, 17, 1, 17, 9, 9, 5, 13, 5, 13]]
-const COLORS = ['GhostWhite', 'Gold', 'Green', 'FireBrick', 'MidnightBlue', 'DeepPink', 'Chartreuse', 'CornflowerBlue', 'OldLace', 'Purple']
+
+function ab2str(buf) {
+    return String.fromCharCode.apply(null, new Uint16Array(buf))
+}
+
+function str2ab(str) {
+    let buf = new ArrayBuffer(str.length*2)
+    let bufView = new Uint16Array(buf)
+    for (let i=0, strLen = str.length; i < strLen; i++) {
+        bufView[i] = str.charCodeAt(i)
+    }
+    return buf
+}
 
 export default class {
     constructor(client = false){
         this.all_players = {}
         this.scores = {}
-        this.state = 'wait'
+        this.state = 0
         this.client = client
         this.lobby = new RoomManager(ROWS, COLS, client)
         this.arena = new RoomManager(ROWS, COLS, client)
         this.time = 0
-        this.color_choices = COLORS
+        this.color_choices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         this.callbacks = {}
 
         // arena closing states
@@ -1112,156 +1674,175 @@ export default class {
         this.callbacks[ev].push(cb)
     }
 
-    sync(json){
-        let was_client = this.client
-        let levi = this.lobby.cbq.length
-        let aevi = this.arena.cbq.length
-        let old_callbacks = this.callbacks
-        Object.assign(this, json)
-        Object.setPrototypeOf(this.lobby, RoomManager.prototype)
-        Object.setPrototypeOf(this.arena, RoomManager.prototype)
-        this.client = was_client
-        this.lobby.client = was_client
-        this.arena.client = was_client
-        this.callbacks = old_callbacks
+    addEventDispatcher(cb){
+        this.lobby.addEventHandler(cb)
+        this.arena.addEventHandler(cb)
+    }
 
-        for(var id in this.all_players){
-            Object.setPrototypeOf(this.all_players[id], Avatar.prototype)
-        }
-
-        this.lobby.players.forEach((p) => {
-            Object.setPrototypeOf(p, Avatar.prototype)
-            p.live_bombs.forEach((b) => {
-                Object.setPrototypeOf(b, Bomb.prototype)
+    trigger(ev, args){
+        if(this.callbacks[ev]){
+            this.callbacks[ev].forEach(cb => {
+                cb(args)
             })
-        })
+        }
+    }
 
-        this.lobby.explosions.forEach((e) => {
-            Object.setPrototypeOf(e, Explosion.prototype)
-        })
+    serialize(){
+        let player_buffers = []
+        let N = 1
+        for(let id in this.all_players){
+            let y = str2ab(id)
 
-        this.lobby.blocks.forEach((b) => {
-            Object.setPrototypeOf(b, Block.prototype)
-        })
+            let n = y.byteLength + 4
+            let z = new ArrayBuffer(n)
 
-        this.lobby.walls.forEach((w) => {
-            Object.setPrototypeOf(w, Wall.prototype)
-        })
+            let size_view = new Uint16Array(z)
+            size_view[0] = n
+            size_view[1] = this.scores[id]
 
-        this.lobby.powerups.forEach((p) => {
-            Object.setPrototypeOf(p, Powerup.prototype)
-        })
+            let byte_view = new Uint8Array(z, 4)
+            byte_view.set(new Uint8Array(y))
 
-        this.lobby.ices.forEach((x) => {
-            Object.setPrototypeOf(x, Ice.prototype)
-        })
-        this.lobby.muds.forEach((x) => {
-            Object.setPrototypeOf(x, Mud.prototype)
-        })
-        this.lobby.fires.forEach((x) => {
-            Object.setPrototypeOf(x, Fire.prototype)
-        })
-        this.lobby.teleporters.forEach((x) => {
-            Object.setPrototypeOf(x, Teleporter.prototype)
-        })
-
-        this.arena.players.forEach((p) => {
-            Object.setPrototypeOf(p, Avatar.prototype)
-            p.live_bombs.forEach((b) => {
-                Object.setPrototypeOf(b, Bomb.prototype)
-            })
-        })
-
-        this.arena.explosions.forEach((e) => {
-            Object.setPrototypeOf(e, Explosion.prototype)
-        })
-
-        this.arena.blocks.forEach((b) => {
-            Object.setPrototypeOf(b, Block.prototype)
-        })
-
-        this.arena.walls.forEach((w) => {
-            Object.setPrototypeOf(w, Wall.prototype)
-        })
-
-        this.arena.powerups.forEach((p) => {
-            Object.setPrototypeOf(p, Powerup.prototype)
-        })
-
-        this.arena.ices.forEach((x) => {
-            Object.setPrototypeOf(x, Ice.prototype)
-        })
-        this.arena.muds.forEach((x) => {
-            Object.setPrototypeOf(x, Mud.prototype)
-        })
-        this.arena.fires.forEach((x) => {
-            Object.setPrototypeOf(x, Fire.prototype)
-        })
-        this.arena.teleporters.forEach((x) => {
-            Object.setPrototypeOf(x, Teleporter.prototype)
-        })
-
-        for(let i = levi; i < this.lobby.cbq.length; i++){
-            let ea = this.lobby.cbq[i]
-            if(this.callbacks[ea.ev]){
-                this.callbacks[ea.ev].forEach((cb) => {
-                    cb(ea.args)
-                })
-            }
+            player_buffers.push(z)
+            N += n
         }
 
-        for(let i = aevi; i < this.arena.cbq.length; i++){
-            let ea = this.arena.cbq[i]
-            if(this.callbacks[ea.ev]){
-                this.callbacks[ea.ev].forEach((cb) => {
-                    cb(ea.args)
-                })
+        let lobby_buffer = this.lobby.serialize()
+        let arena_buffer = this.arena.serialize()
+        N += lobby_buffer.byteLength + 2
+        N += arena_buffer.byteLength + 2
+
+        let buffer = new ArrayBuffer(Math.ceil((22 + N)/4)*4)
+        let float_view = new Float32Array(buffer)
+        float_view[0] = this.time
+
+        let short_view = new Uint16Array(buffer, 4)
+        short_view[0] = this.state
+        short_view[1] = this.cxmin
+        short_view[2] = this.cxmax
+        short_view[3] = this.cymin
+        short_view[4] = this.cymax
+
+        short_view[5] = this.cd
+        short_view[6] = this.cx
+        short_view[7] = this.cy
+        short_view[8] = this.cn
+
+        let byte_view = new Uint8Array(buffer, 22)
+        byte_view[0] = player_buffers.length
+        let o = 2
+        player_buffers.forEach(b => {
+            byte_view.set(new Uint8Array(b), o)
+            o += b.byteLength
+        })
+
+        byte_view[o] = Math.floor(lobby_buffer.byteLength / 256)
+        byte_view[o + 1] = lobby_buffer.byteLength % 256
+        byte_view.set(new Uint8Array(lobby_buffer), o + 2)
+        o += lobby_buffer.byteLength + 2
+
+        byte_view[o] = Math.floor(arena_buffer.byteLength / 256)
+        byte_view[o + 1] = arena_buffer.byteLength % 256
+        byte_view.set(new Uint8Array(arena_buffer), o + 2)
+        o += arena_buffer.byteLength + 2
+
+        return buffer
+    }
+
+    deserialize(buffer){
+        let float_view = new Float32Array(buffer)
+        this.time = float_view[0]
+        let short_view = new Uint16Array(buffer, 4)
+        this.state = short_view[0]
+        this.cxmin = short_view[1]
+        this.cxmax = short_view[2]
+        this.cymin = short_view[3]
+        this.cymax = short_view[4]
+        this.cd = short_view[5]
+        this.cx = short_view[6]
+        this.cy = short_view[7]
+        this.cn = short_view[8]
+        let byte_view = new Uint8Array(buffer, 22)
+        let n_players = byte_view[0]
+        let o = 2
+        for(let i = 0; i < n_players; i++){
+            let size_view = new Uint16Array(buffer, 22 + o)
+            let n_bytes = size_view[0]
+            let n_id = n_bytes - 4
+            let score = size_view[1]
+
+            let id = ab2str(buffer.slice(22 + o + 4, 22 + o + 4 + n_id))
+            
+            if(this.all_players[id] === undefined){
+                this.addPlayer(id)
             }
+
+            this.scores[id] = score
+
+            o += n_bytes
         }
+
+        let n_lobby = byte_view[o]*256 + byte_view[o + 1]
+        let lobby_buf = buffer.slice(22 + o + 2, 22 + o + 2 + n_lobby)
+        this.lobby.deserialize(lobby_buf)
+        o += n_lobby + 2
+
+        let n_arena = byte_view[o]*256 + byte_view[o + 1]
+        let arena_buf = buffer.slice(22 + o + 2, 22 + o + 2 + n_arena)
+        this.arena.deserialize(arena_buf)
+        o += n_arena + 2
     }
 
     addPlayer(id){
         if(this.numPlayers < 10){
-            var c = this.color_choices.shift()
-            this.all_players[id] = new Avatar(Math.floor(Math.random()*(this.lobby.cols - 7)) + 4, Math.floor(Math.random()*(this.lobby.rows - 5)) + 4, c)
-            this.lobby.addPlayer(this.all_players[id])
+            let c = this.color_choices.shift()
+            let avatar = new Avatar(Math.floor(Math.random()*(this.lobby.cols - 7)) + 4, Math.floor(Math.random()*(this.lobby.rows - 5)) + 4, c)
+            this.all_players[id] = c
+            this.lobby.addPlayer(avatar)
             this.scores[id] = 0
         }
     }
 
     removePlayer(id){
-        var avatar = this.all_players[id]
-        if(avatar){
-            var lai = this.lobby.players.indexOf(avatar)
+        let c = this.all_players[id]
+        if(c){
+            var lai = this.lobby.players.findIndex(p => p.color == c)
             if(lai > -1){
                 this.lobby.players.splice(lai, 1)
             }
-            var aai = this.arena.players.indexOf(avatar)
+            var aai = this.arena.players.findIndex(p => p.color == c)
             if(aai > -1){
                 this.arena.players.splice(aai, 1)
             }
-            this.color_choices.unshift(avatar.color)
+            this.color_choices.unshift(c)
             delete this.all_players[id]
         }
         delete this.scores[id]
     }
 
     handleInput(id, input){
-        var avatar = this.all_players[id]
+        let c = this.all_players[id]
+        let avatar = undefined
+        if(this.state == 0){
+            avatar = this.lobby.players.find(p => p.color == c)
+        }else if(this.state == 1){
+            avatar = this.arena.players.find(p => p.color == c)
+        }
+
         if(avatar){
             if(input.press){
                 if(input.x == 2){
-                    avatar.dirs.push(180)
-                    avatar.spd_sp = avatar.max_spd
+                    avatar.dirs.push(4)
+                    avatar.spd_sp = 1
                 }else if(input.x == 0){
                     avatar.dirs.push(0)
-                    avatar.spd_sp = avatar.max_spd
+                    avatar.spd_sp = 1
                 }else if(input.x == 3){
-                    avatar.dirs.push(270)
-                    avatar.spd_sp = avatar.max_spd
+                    avatar.dirs.push(6)
+                    avatar.spd_sp = 1
                 }else if(input.x == 1){
-                    avatar.dirs.push(90)
-                    avatar.spd_sp = avatar.max_spd
+                    avatar.dirs.push(2)
+                    avatar.spd_sp = 1
                 }else if(input.x == 4){
                     var aai = this.arena.players.indexOf(avatar)
                     if(aai > -1){
@@ -1271,24 +1852,24 @@ export default class {
             }else{
                 var ddi = -1
                 if(input.x == 2){
-                    ddi = avatar.dirs.indexOf(180)
-                    avatar.last_dir = 180
+                    ddi = avatar.dirs.indexOf(4)
+                    avatar.last_dir = 4
                 }else if(input.x == 0){
                     ddi = avatar.dirs.indexOf(0)
                     avatar.last_dir = 0
                 }else if(input.x == 3){
-                    ddi = avatar.dirs.indexOf(270)
-                    avatar.last_dir = 270
+                    ddi = avatar.dirs.indexOf(6)
+                    avatar.last_dir = 6
                 }else if(input.x == 1){
-                    ddi = avatar.dirs.indexOf(90)
-                    avatar.last_dir = 90
+                    ddi = avatar.dirs.indexOf(2)
+                    avatar.last_dir = 2
                 }
                 if(ddi > -1){
                     avatar.dirs.splice(ddi, 1)
                 }
                 
                 if(avatar.dirs.length == 0){
-                    avatar.spd_sp = 0;
+                    avatar.spd_sp = 0
                 }
             }
         }
@@ -1298,7 +1879,7 @@ export default class {
         this.lobby.clearAll()
         this.arena.clearAll()
         if(!this.client){
-            this.arena.cbq.push({'ev': 'toArena'})
+            this.arena.fireEvent('toArena')
         }
 
         // generate map
@@ -1389,10 +1970,8 @@ export default class {
 
         // spawn players
         for(let id in this.all_players){
-            let c = this.all_players[id].color
-
-            this.all_players[id] = new Avatar(spawnx.pop(), spawny.pop(), c)
-            this.arena.addPlayer(this.all_players[id])
+            let c = this.all_players[id]
+            this.arena.addPlayer(new Avatar(spawnx.pop(), spawny.pop(), c))
         }
 
         // randomly pick up to 6 blocks and replace them with teleporters
@@ -1413,22 +1992,22 @@ export default class {
     endGame(){
         // move all players into the lobby
         for(let id in this.all_players){
-            if(this.lobby.players.indexOf(this.all_players[id]) < 0){
-                let c = this.all_players[id].color
-                this.all_players[id] = new Avatar(Math.floor(Math.random()*(this.lobby.cols - 7)) + 4, Math.floor(Math.random()*(this.lobby.rows - 5)) + 4, c)
-                this.all_players[id].max_bombs = 0
-                this.lobby.addPlayer(this.all_players[id])
+            let c = this.all_players[id]
+            if(this.lobby.players.findIndex(p => p.color == c) < 0){
+                let avatar = new Avatar(Math.floor(Math.random()*(this.lobby.cols - 7)) + 4, Math.floor(Math.random()*(this.lobby.rows - 5)) + 4, c)
+                avatar.max_bombs = 0
+                this.lobby.addPlayer(avatar)
             }
         }
         if(!this.client){
-            this.lobby.cbq.push({'ev': 'toLobby'})
+            this.lobby.fireEvent('toLobby')
         }
     }
 
     update(dt){
-        if(this.state == 'play'){
+        if(this.state == 1){
             if(this.arena.players.length <= 1){
-                this.state = 'endgame'
+                this.state = 2
                 this.time = 0
             }else{
                 var T = this.time - CLOSING_TIME
@@ -1440,14 +2019,14 @@ export default class {
             this.time += dt
             this.arena.update(dt)
             
-        }else if(this.state == 'endgame'){
-            if(this.time > 2000){
-                this.state = 'wait'
+        }else if(this.state == 2){
+            if(this.time > 100){
+                this.state = 0
                 this.time = 0
                 var winners = [...this.arena.players]
                 winners.forEach((p) => {
                     for(var id in this.all_players){
-                        if(p == this.all_players[id]){
+                        if(p.color == this.all_players[id]){
                             this.scores[id] += 1
                         }
                     }
@@ -1460,7 +2039,7 @@ export default class {
                 this.arena.update(dt)
             }
             
-        }else if(this.state == 'wait'){
+        }else if(this.state == 0){
             var ready = 0
             this.lobby.players.forEach((p) => {
                 if(p.y <= 3){
@@ -1468,7 +2047,7 @@ export default class {
                 }
             })
             if(this.numPlayers > 1 && ready >= this.numPlayers){
-                this.state = 'play'
+                this.state = 1
                 this.startGame()
             }
             this.lobby.update(dt)

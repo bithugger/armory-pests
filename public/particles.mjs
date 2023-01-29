@@ -1,5 +1,5 @@
 class Particle {
-    constructor(x, y, vx, vy, size, time = 1000, period = 300){
+    constructor(x, y, vx, vy, size, time = 50, period = 15){
         this.x = x
         this.y = y
         this.vx = vx
@@ -11,15 +11,15 @@ class Particle {
     }
 
     update(dt){
-        this.x += this.vx*dt/1000
-        this.y += this.vy*dt/1000
+        this.x += this.vx*dt*0.02
+        this.y += this.vy*dt*0.02
         this.time -= dt
     }
 
     draw(){
         push()
-        let c = color(255, 255*Math.tanh(this.time/50))
-        let r = this.size*Math.tanh(this.time/100)
+        let c = color(255, 255*Math.tanh(this.time/3))
+        let r = this.size*Math.tanh(this.time/5)
         let a = Math.abs(this.phase)
         let s = Math.sign(this.phase)
         if(this.period > 0){
