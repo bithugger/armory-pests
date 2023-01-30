@@ -38,12 +38,12 @@ class Avatar {
         if(this.slide_dir >= 0){
             return this.slide_dir
         }else{
-            var dir = this.last_dir
+            let dir = this.last_dir
             if(this.dirs.length > 1){
-                var d1 = this.dirs[this.dirs.length - 2]
-                var d2 = this.dirs[this.dirs.length - 1]
-                if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 2) 
-                    || (this.blocked_down && d1 == 1) || (this.blocked_up && d1 == 3)){
+                let d1 = this.dirs[this.dirs.length - 2]
+                let d2 = this.dirs[this.dirs.length - 1]
+                if((this.blocked_right && d1 == 0) || (this.blocked_left && d1 == 4) 
+                    || (this.blocked_down && d1 == 2) || (this.blocked_up && d1 == 6)){
                     dir = d2
                 }else{
                     dir = d1
@@ -60,10 +60,10 @@ class Avatar {
     }
 
     update(dt){
-        var d1 = this.direction
-        var dir = d1*Math.PI/4
-        var spd_err = this.spd_sp*this.max_spd - this.spd;
-        var spd = this.spd + Math.sign(spd_err)*Math.min(Math.abs(spd_err), this.max_spd/3)
+        let d1 = this.direction
+        let dir = d1*Math.PI/4
+        let spd_err = this.spd_sp*this.max_spd - this.spd;
+        let spd = this.spd + Math.sign(spd_err)*Math.min(Math.abs(spd_err), this.max_spd/3)
         spd = Math.max(Math.min(spd, this.max_spd), 0)
         spd = Math.min(spd, 7.5)
         if(this.slowed){
@@ -79,7 +79,7 @@ class Avatar {
             this.y += Math.sin(dir)*spd*dt*0.02;
         }
 
-        for(var i = this.live_bombs.length - 1; i >= 0; i--){
+        for(let i = this.live_bombs.length - 1; i >= 0; i--){
             if(this.live_bombs[i].state == 1 && this.live_bombs[i].time <= 0){
                 delete this.live_bombs[i]
                 this.live_bombs.splice(i, 1)
@@ -166,10 +166,10 @@ class Avatar {
         this.slowed = int_view[7] >> 5 & 1 > 0
         this.spd_sp = int_view[7] >> 4 & 1
 
-        this.blocked_left = int_view[7] >> 3 & 1 > 0
-        this.blocked_down = int_view[7] >> 2 & 1 > 0
-        this.blocked_right = int_view[7] >> 1 & 1 > 0
-        this.blocked_up = int_view[7] & 1 > 0
+        this.blocked_left = ((int_view[7] >> 3) & 1) > 0
+        this.blocked_down = ((int_view[7] >> 2) & 1) > 0
+        this.blocked_right = ((int_view[7] >> 1) & 1) > 0
+        this.blocked_up = (int_view[7] & 1) > 0
         this.last_dir = int_view[8]
         this.slide_dir = int_view[9] - 1
 
@@ -1805,7 +1805,7 @@ export default class {
 
     removePlayer(id){
         let c = this.all_players[id]
-        if(c){
+        if(c != undefined){
             var lai = this.lobby.players.findIndex(p => p.color == c)
             if(lai > -1){
                 this.lobby.players.splice(lai, 1)
