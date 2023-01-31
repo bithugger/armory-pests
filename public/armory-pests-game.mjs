@@ -1693,14 +1693,15 @@ export default class {
         for(let id in this.all_players){
             let y = str2ab(id)
 
-            let n = y.byteLength + 4
+            let n = y.byteLength + 6
             let z = new ArrayBuffer(n)
 
             let size_view = new Uint16Array(z)
             size_view[0] = n
-            size_view[1] = this.scores[id]
+            size_view[1] = this.all_players[id]
+            size_view[2] = this.scores[id]
 
-            let byte_view = new Uint8Array(z, 4)
+            let byte_view = new Uint8Array(z, 6)
             byte_view.set(new Uint8Array(y))
 
             player_buffers.push(z)
@@ -1768,14 +1769,16 @@ export default class {
         for(let i = 0; i < n_players; i++){
             let size_view = new Uint16Array(buffer, 22 + o)
             let n_bytes = size_view[0]
-            let n_id = n_bytes - 4
-            let score = size_view[1]
+            let n_id = n_bytes - 6
+            let player = size_view[1]
+            let score = size_view[2]
 
-            let id = ab2str(buffer.slice(22 + o + 4, 22 + o + 4 + n_id))
+            let id = ab2str(buffer.slice(22 + o + 6, 22 + o + 6 + n_id))
             
             if(this.all_players[id] === undefined){
                 this.addPlayer(id)
             }
+            this.all_players[id] = player
 
             this.scores[id] = score
 
@@ -1821,8 +1824,8 @@ export default class {
         delete this.scores[id]
     }
 
-    handleInput(id, input){
-        let c = this.all_players[id]
+    handleInput(input){
+        let c = this.all_players[input.player]
         let avatar = undefined
         if(this.state == 0){
             avatar = this.lobby.players.find(p => p.color == c)

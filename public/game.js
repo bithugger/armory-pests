@@ -4,6 +4,7 @@ import { ts } from './sync.js'
 const game = new Game(true)
 const particles = new ParticleSystem()
 
+const is_mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 const COLORS = ['GhostWhite', 'Gold', 'Green', 'FireBrick', 'MidnightBlue', 'DeepPink', 'Chartreuse', 'CornflowerBlue', 'OldLace', 'Purple']
 const POWERUP_LABELS = ['!', 'B+', 'S+', 'R+', 'TP', 'P', '+X', 'SH', 'K', '-1', '0', '*', ' ', '?']
 var SQUARE_SIZE = Math.min(window.innerWidth/(game.arena.cols + 2 + 6), window.innerHeight/(game.arena.rows + 2))
@@ -39,10 +40,10 @@ game.on('teleport', (ps) => {
     let d = Math.hypot(p1.x - p2.x, p1.y - p2.y)
     for(let i = 0; i < d; i += 0.5){
         let s = i/d
-        let x2 = p2.x + s*(p1.x - p2.x)
-        let y2 = p2.y + s*(p1.y - p2.y)
+        let x2 = p2.x + s*(p1.x - p2.x) + randomGaussian(0, 0.1)
+        let y2 = p2.y + s*(p1.y - p2.y) + randomGaussian(0, 0.1)
 
-        particles.add(x2, y2, randomGaussian(0, 0.1), randomGaussian(0, 0.1), 0.4, s*25)
+        particles.add(x2, y2, randomGaussian(0, 0.05), randomGaussian(0, 0.05), 0.4, s*25)
     }
 })
 
@@ -75,7 +76,7 @@ function gameStep(){
 }
 
 // input delay target
-const INPUT_DELAY = 40 // ms
+const INPUT_DELAY = 30 // ms
 
 // websocket required
 const socket = io('/', {
@@ -138,7 +139,7 @@ socket.on("connect", () => {
         })
 
         connection.on('data', data => {
-            handlePeerData(connection.peer, data)
+            handlePeerData(data)
         })
     })
 
@@ -148,9 +149,9 @@ socket.on("connect", () => {
         }
     }
 
-    function handlePeerData(id, data){
+    function handlePeerData(data){
         setTimeout(() => {
-            game.handleInput(id, data)
+            game.handleInput(data)
         }, data.t - ts.now)
     }
 
@@ -170,7 +171,7 @@ socket.on("connect", () => {
         })
 
         connection.on('data', data => {
-            handlePeerData(connection.peer, data)
+            handlePeerData(data)
         })
     })
 
@@ -182,6 +183,15 @@ socket.on("connect", () => {
         game.trigger(e.ev, e.args)
     })
 
+    function triggerInput(press, x){
+        let input = { press: press, x: x, t: ts.now + INPUT_DELAY, player: socket.id }
+        broadcast(input)
+        socket.emit('input', input)
+        setTimeout(() => {
+            game.handleInput(input)
+        }, INPUT_DELAY)
+    }
+
     window.keyPressed = function () {
         if(showIntro){
             if(gameReady && keyCode === 32){
@@ -191,71 +201,143 @@ socket.on("connect", () => {
             }
         }else{
             if(keyCode === LEFT_ARROW){
-                broadcast({ press: true, x: 2, t: ts.now + INPUT_DELAY })
-                socket.emit('input', { press: true, x: 2, t: ts.now + INPUT_DELAY })
-                setTimeout(() => {
-                    game.handleInput(socket.id, {press: true, x: 2})
-                }, INPUT_DELAY)
+                triggerInput(true, 2)
             }else if(keyCode === RIGHT_ARROW){
-                broadcast({ press: true, x: 0, t: ts.now + INPUT_DELAY })
-                socket.emit('input', { press: true, x: 0, t: ts.now + INPUT_DELAY })
-                setTimeout(() => {
-                    game.handleInput(socket.id, {press: true, x: 0})
-                }, INPUT_DELAY)
+                triggerInput(true, 0)
             }else if(keyCode === UP_ARROW){
-                broadcast({ press: true, x: 3, t: ts.now + INPUT_DELAY })
-                socket.emit('input', { press: true, x: 3, t: ts.now + INPUT_DELAY })
-                setTimeout(() => {
-                    game.handleInput(socket.id, {press: true, x: 3})
-                }, INPUT_DELAY)
+                triggerInput(true, 3)
             }else if(keyCode === DOWN_ARROW){
-                broadcast({ press: true, x: 1, t: ts.now + INPUT_DELAY })
-                socket.emit('input', { press: true, x: 1, t: ts.now + INPUT_DELAY })
-                setTimeout(() => {
-                    game.handleInput(socket.id, {press: true, x: 1})
-                }, INPUT_DELAY)
+                triggerInput(true, 1)
             }else if(keyCode === 32){ // space
-                broadcast({ press: true, x: 4, t: ts.now + INPUT_DELAY })
-                socket.emit('input', { press: true, x: 4, t: ts.now + INPUT_DELAY })
-                setTimeout(() => {
-                    game.handleInput(socket.id, {press: true, x: 4})
-                }, INPUT_DELAY)
+                triggerInput(true, 4)
             }
         }
     }
     
     window.keyReleased = function () {
         if(keyCode === LEFT_ARROW){
-            broadcast({ press: false, x: 2, t: ts.now + INPUT_DELAY })
-            socket.emit('input', { press: false, x: 2, t: ts.now + INPUT_DELAY })
-            setTimeout(() => {
-                game.handleInput(socket.id, {press: false, x: 2})
-            }, INPUT_DELAY)
+            triggerInput(false, 2)
         }else if(keyCode === RIGHT_ARROW){
-            broadcast({ press: false, x: 0, t: ts.now + INPUT_DELAY })
-            socket.emit('input', {press: false, x: 0, t: ts.now + INPUT_DELAY })
-            setTimeout(() => {
-                game.handleInput(socket.id, {press: false, x: 0})
-            }, INPUT_DELAY)
+            triggerInput(false, 0)
         }else if(keyCode === UP_ARROW){
-            broadcast({ press: false, x: 3, t: ts.now + INPUT_DELAY })
-            socket.emit('input', {press: false, x: 3, t: ts.now + INPUT_DELAY })
-            setTimeout(() => {
-                game.handleInput(socket.id, {press: false, x: 3})
-            }, INPUT_DELAY)
+            triggerInput(false, 3)
         }else if(keyCode === DOWN_ARROW){
-            broadcast({ press: false, x: 1, t: ts.now + INPUT_DELAY })
-            socket.emit('input', {press: false, x: 1, t: ts.now + INPUT_DELAY })
-            setTimeout(() => {
-                game.handleInput(socket.id, {press: false, x: 1})
-            }, INPUT_DELAY )
+            triggerInput(false, 1)
         }else if(keyCode === 32){ // space
-            broadcast({ press: false, x: 4, t: ts.now + INPUT_DELAY })
-            socket.emit('input', {press: false, x: 4, t: ts.now + INPUT_DELAY })
-            setTimeout(() => {
-                game.handleInput(socket.id, {press: false, x: 4})
-            }, INPUT_DELAY)
+            triggerInput(false, 4)
         }
+    }
+
+    let touch_input_left = false
+    let touch_input_right = false
+    let touch_input_up = false
+    let touch_input_down = false
+    let touch_input_center = false
+    function processTouches(tchs){
+        let touch_left = false
+        let touch_right = false
+        let touch_up = false
+        let touch_down = false
+        let touch_center = false
+        for(let tc of tchs){
+            if(tc.y < SCREEN_HEIGHT/4){
+                // up
+                touch_up = true
+            }else if(tc.y > 3*SCREEN_HEIGHT/4){
+                // down
+                touch_down = true
+            }else{
+                if(tc.x < SCREEN_WIDTH/4){
+                    // left
+                    touch_left = true
+                }else if(tc.x > 3*SCREEN_WIDTH/4){
+                    // right
+                    touch_right = true
+                }else{
+                    // center
+                    touch_center = true
+                }
+            }
+        }
+
+        // left
+        if(!touch_input_left && touch_left){
+            // input pressed
+            triggerInput(true, 2)
+        }else if(touch_input_left && !touch_left){
+            // input released
+            triggerInput(false, 2)
+        }
+
+        // right
+        if(!touch_input_right && touch_right){
+            // input pressed
+            triggerInput(true, 0)
+        }else if(touch_input_right && !touch_right){
+            // input released
+            triggerInput(false, 0)
+        }
+
+        // up
+        if(!touch_input_up && touch_up){
+            // input pressed
+            triggerInput(true, 3)
+        }else if(touch_input_up && !touch_up){
+            // input released
+            triggerInput(false, 3)
+        }
+
+        // down
+        if(!touch_input_down && touch_down){
+            // input pressed
+            triggerInput(true, 1)
+        }else if(touch_input_down && !touch_down){
+            // input released
+            triggerInput(false, 1)
+        }
+
+        // center
+        if(!touch_input_center && touch_center){
+            // input pressed
+            triggerInput(true, 4)
+        }else if(touch_input_center && !touch_center){
+            // input released
+            triggerInput(false, 4)
+        }
+
+        touch_input_left = touch_left
+        touch_input_right = touch_right
+        touch_input_up = touch_up
+        touch_input_down = touch_down
+        touch_input_center = touch_center
+    }
+
+    /* prevents the mobile browser from processing some default
+    * touch events, like swiping left for "back" or scrolling
+    * the page. */
+    window.touchStarted = function (){
+        if(is_mobile && touches.length > 0){
+            if(showIntro){
+                if(gameReady){
+                    showIntro = false
+                    socket.emit('join')
+                    setInterval(gameStep, LOCAL_GAME_INTERVAL)
+                }
+            }else{
+                processTouches(touches)
+            }
+        }
+        return false
+    }
+
+    window.touchMoved = function (){
+        processTouches(touches)
+        return false
+    }
+
+    window.touchEnded = function (){
+        processTouches(touches)
+        return false
     }
 
     setTimeout(() => {
@@ -273,6 +355,8 @@ socket.on("connect", () => {
 
     socket.io.on('close', () => {
         peer.disconnect()
+        gameReady = false
+        showIntro = true
     })
 })
 
@@ -564,7 +648,7 @@ function drawLobbyInfo(m){
     translate(ss_px, ss_py)
 
     fill(200)
-    textSize(1/3)
+    textSize(1/2)
     drawPowerUp({x: m.cols + 2, y: 1, label: 1})
     text('Bombs Up', m.cols + 3, 1.1)
 
@@ -611,18 +695,22 @@ function drawIntro(){
     background(0)
 
     push()
-    stroke(200)
+    fill(200)
     scale(SQUARE_SIZE)
     translate(3, 0)
     strokeWeight(1/20)
-    textSize(1)
+    textSize(2)
     textAlign(CENTER, CENTER)
-    text('Armory Pests', game.arena.cols/2, game.arena.rows/2)
-    textSize(1/3)
+    text('Armory Pests', game.arena.cols/2, game.arena.rows/2 - 1)
+    textSize(2/3)
     text('a game by wavy', game.arena.cols/2, game.arena.rows/2 + 1)
     if(gameReady){
-        textSize(1/2)
-        text('Press Space to Play', game.arena.cols/2, game.arena.rows/2 + 2)
+        textSize(1)
+        if(is_mobile){
+            text('Touch to Play', game.arena.cols/2, game.arena.rows/2 + 2)
+        }else{
+            text('Press Space to Play', game.arena.cols/2, game.arena.rows/2 + 2)
+        }
     }
     pop()
 }
@@ -669,17 +757,24 @@ function drawLobby(){
     line(1/2, 3.5, game.lobby.cols + 1/2, 3.5)
 
     textAlign(CENTER, CENTER)
-    textSize(1/2)
+    strokeWeight(0)
+    fill(100)
+    textSize(1)
     if(game.lobby.players.length > 1){
         text('Move here to start', 9, 2)
     }else{
         text('Waiting for players', 9, 2)
     }
-    textSize(1)
+    textSize(2)
     text('Lobby', 9, 8)
-    textSize(1/2)
-    text('Move with arrow keys', 9, 9.5)
-    text('Bomb with space', 9, 10)
+    textSize(2/3)
+    if(is_mobile){
+        text('Touch screen edges to move', 9, 9.5)
+        text('Touch screen center to bomb', 9, 10.2)
+    }else{
+        text('Move with arrow keys', 9, 9.5)
+        text('Bomb with space', 9, 10.2)
+    }
     pop()
 
     drawLobbyInfo(game.lobby)
@@ -714,7 +809,7 @@ function drawPlaying(){
         push()
         scale(SQUARE_SIZE)
         strokeWeight(1/20)
-        textSize(1)
+        textSize(2)
         textAlign(CENTER, CENTER)
         rectMode(CENTER)
         fill(color(250, 200))

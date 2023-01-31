@@ -37,10 +37,8 @@ io.on('connection', socket => {
     })
     
     socket.on('input', (data) => {
-        // socket.volatile.broadcast.emit('input', data)
-
         setTimeout(() => {
-            game.handleInput(socket.id, data)
+            game.handleInput(data)
         }, data.t - Date.now())
     })
     
@@ -73,11 +71,9 @@ io.on('connection', socket => {
 
 server.listen(8888)
 
-
 const peerServer = PeerServer({
     port: 8889
 })
-
 
 function gameStep(){
     game.update(1)
