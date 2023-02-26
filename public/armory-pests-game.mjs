@@ -990,10 +990,10 @@ class RoomManager {
             }else{
                 // corner collision, slide past
                 // this should never happen since it is a bomb
-                if(abs(b.vx) > 0.001){
+                if(Math.abs(b.vx) > 0.001){
                     b.y = Math.round(b.y)
                 }
-                if(abs(b.vy) > 0.001){
+                if(Math.abs(b.vy) > 0.001){
                     b.x = Math.round(b.x)
                 }
             }

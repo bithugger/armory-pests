@@ -25,11 +25,11 @@ const SS_KY = 1/2
 game.on('explode', (b) => {
     let d = random(0, 360)*2*PI/360
     if(b.power){
-        ss_vx = cos(d)*b.len/15
-        ss_vy = sin(d)*b.len/12
+        ss_vx = cos(d)*b.len/30
+        ss_vy = sin(d)*b.len/24
     }else{
-        ss_vx = cos(d)*b.len/55
-        ss_vy = sin(d)*b.len/44
+        ss_vx = cos(d)*b.len/60
+        ss_vy = sin(d)*b.len/50
     }
 })
 
@@ -38,7 +38,7 @@ game.on('teleport', (ps) => {
     let p1 = ps[0]
     let p2 = ps[1]
     let d = Math.hypot(p1.x - p2.x, p1.y - p2.y)
-    for(let i = 0; i < d; i += 0.5){
+    for(let i = 0; i < d; i += 2){
         let s = i/d
         let x2 = p2.x + s*(p1.x - p2.x) + randomGaussian(0, 0.1)
         let y2 = p2.y + s*(p1.y - p2.y) + randomGaussian(0, 0.1)
@@ -49,7 +49,7 @@ game.on('teleport', (ps) => {
 
 // death effect
 game.on('died', (p) => {
-    for(let i = 0; i < 20; i++){
+    for(let i = 0; i < 10; i++){
         particles.add(p.x, p.y, randomGaussian(0, 2), randomGaussian(0, 2), 0.1, 25)
     }
 })
