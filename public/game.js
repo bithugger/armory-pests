@@ -23,14 +23,14 @@ const SS_BY = 1/7
 const SS_KX = 1/2
 const SS_KY = 1/2
 game.on('explode', (b) => {
-    let d = random(0, 360)*2*PI/360
-    if(b.power){
-        ss_vx = cos(d)*b.len/30
-        ss_vy = sin(d)*b.len/24
-    }else{
-        ss_vx = cos(d)*b.len/60
-        ss_vy = sin(d)*b.len/50
-    }
+    // let d = random(0, 360)*2*PI/360
+    // if(b.power){
+    //     ss_vx = cos(d)*b.len/30
+    //     ss_vy = sin(d)*b.len/24
+    // }else{
+    //     ss_vx = cos(d)*b.len/60
+    //     ss_vy = sin(d)*b.len/50
+    // }
 })
 
 // teleport effect
@@ -38,7 +38,7 @@ game.on('teleport', (ps) => {
     let p1 = ps[0]
     let p2 = ps[1]
     let d = Math.hypot(p1.x - p2.x, p1.y - p2.y)
-    for(let i = 0; i < d; i += 2){
+    for(let i = 0; i < d; i += 1){
         let s = i/d
         let x2 = p2.x + s*(p1.x - p2.x) + randomGaussian(0, 0.1)
         let y2 = p2.y + s*(p1.y - p2.y) + randomGaussian(0, 0.1)
